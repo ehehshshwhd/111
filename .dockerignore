@@ -1,4 +1,5 @@
 **
+!Dockerfile
 !score-review-web/
 !score-review-web/package.json
 !score-review-web/package-lock.json
