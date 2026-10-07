@@ -1,0 +1,7 @@
+**
+!score-review-web/
+!score-review-web/package.json
+!score-review-web/package-lock.json
+!score-review-web/server.js
+!score-review-web/cloud-store.js
+!score-review-web/index.html
