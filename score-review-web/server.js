@@ -47,8 +47,22 @@ function serve(res, urlPath) {
 function body(req) { return new Promise((resolve, reject) => { let value = ''; req.on('data', chunk => { value += chunk; if (value.length > 2 * 1024 * 1024) reject(new Error('请求过大')) }); req.on('end', () => { try { resolve(value ? JSON.parse(value) : {}) } catch { reject(new Error('请求格式无效')) } }); req.on('error', reject) }) }
 function key(eventId, stage) { return `${String(eventId || 'default').slice(0, 100)}::${String(stage || '').toUpperCase()}` }
 function cloudError(res, error) {
+  const rawMessage = String(error && (error.errMsg || error.message) || error)
+  const rawCode = String(error && (error.code || error.errCode) || '')
   console.error('CloudBase work_records request failed:', error && (error.stack || error.message) || error)
-  return send(res, 503, { ok: false, message: 'CloudBase 数据库暂时不可用，请检查云托管数据库权限和环境配置。' })
+  let message = 'CloudBase 数据库暂时不可用，请检查云托管环境变量和数据库权限。'
+  let diagnosticCode = rawCode || 'CLOUD_DB_ERROR'
+  if (/未配置 SCORE_REVIEW_CLOUDBASE_ENV/i.test(rawMessage)) {
+    message = '未配置 CloudBase 环境 ID，请设置 SCORE_REVIEW_CLOUDBASE_ENV。'
+    diagnosticCode = 'CLOUD_ENV_MISSING'
+  } else if (/missing secret|secretId|secretKey|accessKey|credential|INVALID_ACCESS_TOKEN|token format|鉴权|权限|403|401/i.test(rawMessage) || /INVALID_ACCESS_TOKEN/i.test(rawCode)) {
+    message = 'CloudBase 鉴权失败，请在云托管环境变量中配置 CLOUDBASE_APIKEY，并确认该密钥属于当前环境。'
+    diagnosticCode = rawCode || 'CLOUD_AUTH_ERROR'
+  } else if (/collection|502005|不存在/i.test(rawMessage)) {
+    message = 'CloudBase 的 work_records 集合不可用，请检查数据库集合和服务权限。'
+    diagnosticCode = rawCode || 'CLOUD_COLLECTION_ERROR'
+  }
+  return send(res, 503, { ok: false, message, diagnosticCode })
 }
 
 const server = http.createServer(async (req, res) => {
@@ -56,6 +70,15 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
   if (url.pathname === '/api/session' && req.method === 'POST') {
     try { const input = await body(req); const supplied = Buffer.from(String(input.password || '')); const expected = Buffer.from(WEB_PASSWORD); if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return send(res, 401, { ok: false, message: '网页密码错误' }); const secure = process.env.NODE_ENV === 'production' ? ' Secure;' : ''; return send(res, 200, { ok: true }, { 'Set-Cookie': `score_session=${makeSession()}; HttpOnly;${secure} SameSite=Lax; Max-Age=28800; Path=/` }) } catch (error) { return send(res, 400, { ok: false, message: error.message }) }
+  }
+  if (url.pathname === '/api/health' && req.method === 'GET') {
+    return send(res, 200, {
+      ok: true,
+      cloudEnabled: cloudStore.enabled,
+      cloudEnvConfigured: Boolean(cloudStore.env),
+      cloudAuthConfigured: Boolean(cloudStore.authConfigured),
+      cloudAuthMode: cloudStore.authMode
+    })
   }
   if (url.pathname.startsWith('/api/')) {
     if (!validSession(req)) return send(res, 401, { ok: false, message: '请先登录网页后台' })

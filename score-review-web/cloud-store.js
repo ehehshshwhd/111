@@ -1,6 +1,7 @@
 const STAGES = new Set(Array.from({ length: 9 }, (_, index) => `SS${index + 1}`))
 
-const env = String(process.env.SCORE_REVIEW_CLOUDBASE_ENV || '').trim()
+const env = String(process.env.SCORE_REVIEW_CLOUDBASE_ENV || process.env.CBR_ENV_ID || '').trim()
+const accessKey = String(process.env.SCORE_REVIEW_CLOUDBASE_APIKEY || process.env.CLOUDBASE_APIKEY || '').trim()
 let database
 let collectionReady
 
@@ -8,7 +9,9 @@ function getDatabase() {
   if (!env) throw new Error('未配置 SCORE_REVIEW_CLOUDBASE_ENV')
   if (!database) {
     const cloudbase = require('@cloudbase/node-sdk')
-    database = cloudbase.init({ env }).database()
+    const config = { env }
+    if (accessKey) config.accessKey = accessKey
+    database = cloudbase.init(config).database()
   }
   return database
 }
@@ -82,4 +85,13 @@ async function put(eventId, stage, inputRows) {
   return { count: rows.length }
 }
 
-module.exports = { enabled: Boolean(env), env, get, put }
+module.exports = {
+  enabled: Boolean(env),
+  env,
+  authConfigured: Boolean(accessKey || (process.env.TENCENTCLOUD_SECRETID && process.env.TENCENTCLOUD_SECRETKEY)),
+  authMode: accessKey
+    ? 'api-key'
+    : (process.env.TENCENTCLOUD_SECRETID && process.env.TENCENTCLOUD_SECRETKEY ? 'runtime-credentials' : 'missing'),
+  get,
+  put
+}
