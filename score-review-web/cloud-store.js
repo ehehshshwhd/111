@@ -1,7 +1,7 @@
 const STAGES = new Set(Array.from({ length: 9 }, (_, index) => `SS${index + 1}`))
 
 const env = String(process.env.SCORE_REVIEW_CLOUDBASE_ENV || process.env.CBR_ENV_ID || '').trim()
-const accessKey = String(process.env.SCORE_REVIEW_CLOUDBASE_APIKEY || process.env.CLOUDBASE_APIKEY || '').trim()
+const accessKey = String(process.env.SCORE_REVIEW_CLOUDBASE_APIKEY || process.env.CLOUDBASE_API_KEY || process.env.CLOUDBASE_APIKEY || '').trim()
 let database
 let collectionReady
 

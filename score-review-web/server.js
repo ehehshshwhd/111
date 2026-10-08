@@ -56,7 +56,7 @@ function cloudError(res, error) {
     message = '未配置 CloudBase 环境 ID，请设置 SCORE_REVIEW_CLOUDBASE_ENV。'
     diagnosticCode = 'CLOUD_ENV_MISSING'
   } else if (/missing secret|secretId|secretKey|accessKey|credential|INVALID_ACCESS_TOKEN|token format|鉴权|权限|403|401/i.test(rawMessage) || /INVALID_ACCESS_TOKEN/i.test(rawCode)) {
-    message = 'CloudBase 鉴权失败，请在云托管环境变量中配置 CLOUDBASE_APIKEY，并确认该密钥属于当前环境。'
+    message = 'CloudBase 鉴权失败，请在云托管环境变量中配置 CLOUDBASE_API_KEY，并确认该密钥属于当前环境。'
     diagnosticCode = rawCode || 'CLOUD_AUTH_ERROR'
   } else if (/collection|502005|不存在/i.test(rawMessage)) {
     message = 'CloudBase 的 work_records 集合不可用，请检查数据库集合和服务权限。'

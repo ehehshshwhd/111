@@ -11,13 +11,13 @@
    - `SCORE_REVIEW_PASSWORD`：网页管理员登录密码。
    - `SCORE_REVIEW_SESSION_SECRET`：独立随机长字符串，至少 32 个字符。
    - `SCORE_REVIEW_CLOUDBASE_ENV`：`cloud1-d5gurg39naf27d7a7`。
-   - `CLOUDBASE_APIKEY`：当前 CloudBase 环境的服务端 API Key。也可以使用变量名 `SCORE_REVIEW_CLOUDBASE_APIKEY`。
+   - `CLOUDBASE_API_KEY`：当前 CloudBase 环境的服务端 API Key。也兼容 `CLOUDBASE_APIKEY` 和 `SCORE_REVIEW_CLOUDBASE_APIKEY`。
 
-   在云托管环境变量页面开启“API Key 设置”，选择当前环境对应的 API Key；或者把 API Key 作为 `CLOUDBASE_APIKEY` 环境变量配置。API Key 只放在云托管服务端，不要写入网页代码或提交到 GitHub。
+   在云托管环境变量页面开启“API Key 设置”，选择当前环境对应的 API Key；或者把 API Key 作为 `CLOUDBASE_API_KEY` 环境变量配置。API Key 只放在云托管服务端，不要写入网页代码或提交到 GitHub。
 
 4. 部署后通过云托管提供的 HTTPS 地址打开网页。页面和 `/api` 使用同一域名；小程序继续用 `wx.cloud.callContainer` 连接服务名 `score-review-api`。
 
-容器启动时会强制要求设置管理员密码和会话密钥。`SCORE_REVIEW_CLOUDBASE_ENV` 未设置时，服务只会使用容器本机文件存储，不会与小程序共享数据；要读取或修改小程序成绩，请同时配置该环境 ID 和当前环境的 `CLOUDBASE_APIKEY`，并确认云托管服务有访问该环境数据库的权限。网页通过独立的 HttpOnly 会话认证；不要把数据库密钥、密码或会话密钥提交到 GitHub。
+容器启动时会强制要求设置管理员密码和会话密钥。`SCORE_REVIEW_CLOUDBASE_ENV` 未设置时，服务只会使用容器本机文件存储，不会与小程序共享数据；要读取或修改小程序成绩，请同时配置该环境 ID 和当前环境的 `CLOUDBASE_API_KEY`，并确认云托管服务有访问该环境数据库的权限。网页通过独立的 HttpOnly 会话认证；不要把数据库密钥、密码或会话密钥提交到 GitHub。
 
 ## 本机检查
 
