@@ -82,18 +82,36 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   .title-actions button{flex:0 1 auto}
 }
   </style>
+  <style>
+    .sidebar{transition:width .22s ease,padding .22s ease}
+    .sidebar-toggle{align-self:flex-end;display:grid;place-items:center;width:30px;height:30px;margin:-8px -2px 10px;border:1px solid rgba(0,0,0,.1);border-radius:8px;background:rgba(255,255,255,.72);color:#515154;font-size:22px;line-height:1;transition:background .15s ease,color .15s ease,transform .15s ease}
+    .sidebar-toggle:hover{background:#fff;color:var(--blue)}
+    .sidebar-toggle-icon{display:block;transform:translateX(-1px)}
+    .app.sidebar-collapsed .sidebar-toggle-icon{transform:rotate(180deg)}
+    .nav-item-label{min-width:0;white-space:nowrap}
+    .app.sidebar-collapsed>.sidebar{width:76px;flex-basis:76px;padding:18px 10px}
+    .app.sidebar-collapsed .brand{justify-content:center;padding:0 0 24px}
+    .app.sidebar-collapsed .brand>div:last-child,.app.sidebar-collapsed .nav-label,.app.sidebar-collapsed .nav-item-label,.app.sidebar-collapsed .user-line>span:last-child,.app.sidebar-collapsed .sidebar-footer>span{display:none}
+    .app.sidebar-collapsed .nav-item{justify-content:center;gap:0;padding:12px 0}
+    .app.sidebar-collapsed .nav-icon{width:auto}
+    .app.sidebar-collapsed .sidebar-footer{padding:16px 0 0}
+    .app.sidebar-collapsed .user-line{justify-content:center;margin:0}
+    .app.sidebar-collapsed .sidebar-toggle{margin:-4px 0 14px}
+    @media(prefers-reduced-motion:reduce){.sidebar,.sidebar-toggle{transition:none}}
+  </style>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
+    <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="收起侧边栏" aria-expanded="true" title="收起侧边栏"><span class="sidebar-toggle-icon" aria-hidden="true">‹</span></button>
     <div class="brand"><div class="brand-mark">R</div><div><strong>RACE CONTROL</strong><small>赛事成绩管理台</small></div></div>
     <div class="nav-label">工作区</div>
-    <button class="nav-item active"><span class="nav-icon">▦</span>成绩审核</button>
-    <button class="nav-item" id="navUploads"><span class="nav-icon">↥</span>上传批次</button>
-    <button class="nav-item" id="navPublished"><span class="nav-icon">◷</span>发布记录</button>
+    <button class="nav-item active" title="成绩审核"><span class="nav-icon">▦</span><span class="nav-item-label">成绩审核</span></button>
+    <button class="nav-item" id="navUploads" title="上传批次"><span class="nav-icon">↥</span><span class="nav-item-label">上传批次</span></button>
+    <button class="nav-item" id="navPublished" title="发布记录"><span class="nav-icon">◷</span><span class="nav-item-label">发布记录</span></button>
     <div class="nav-label">系统</div>
-    <button class="nav-item"><span class="nav-icon">⚙</span>赛事设置</button>
+    <button class="nav-item" title="赛事设置"><span class="nav-icon">⚙</span><span class="nav-item-label">赛事设置</span></button>
     <div class="sidebar-footer"><div class="user-line"><span class="avatar">管</span><span>管理员</span></div><span>权限：最高管理员</span></div>
   </aside>
   <section class="workspace">
@@ -207,6 +225,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     const stageSheets=stages.map(stage=>{const hasPenalty=entries.some(entry=>{const result=entry.results[stage];return result&&parsePenalty(result.penalty)>0});const header=['车号','发车时间','收车时间',...(hasPenalty?['罚时']:[]),'赛段用时'];const sheetRows=entries.map(entry=>{const result=entry.results[stage];if(!result)return [entry.car,'','',...(hasPenalty?['']:[]),''];return [entry.car,result.start,result.finish,...(hasPenalty?[formatPenalty(result.penalty)]:[]),formatDuration(result.value)]});return {name:stage,rows:[header,...sheetRows]}});
     downloadWorkbook([{name:'总成绩',rows:totalRows},...stageSheets],`成绩表-${mode==='best'?'最佳成绩':'总成绩'}.xlsx`)
   }
+  const appShell=$('.app'),sidebarToggle=$('#sidebarToggle');function setSidebarCollapsed(collapsed){appShell.classList.toggle('sidebar-collapsed',collapsed);sidebarToggle.setAttribute('aria-expanded',String(!collapsed));const label=collapsed?'展开侧边栏':'收起侧边栏';sidebarToggle.setAttribute('aria-label',label);sidebarToggle.title=label;try{localStorage.setItem('score-review-sidebar-collapsed-v1',collapsed?'1':'0')}catch{}}try{setSidebarCollapsed(localStorage.getItem('score-review-sidebar-collapsed-v1')==='1')}catch{setSidebarCollapsed(false)}sidebarToggle.onclick=()=>setSidebarCollapsed(!appShell.classList.contains('sidebar-collapsed'));
   $('#createEventBtn').onclick=openEventEditor;$('#closeEventEditor').onclick=closeEventEditor;$('#cancelEventEditor').onclick=closeEventEditor;$('#eventEditorBackdrop').onclick=e=>{if(e.target.id==='eventEditorBackdrop')closeEventEditor()};$('#eventTemplateSelect').onchange=e=>setEventForm(eventTemplateById(e.target.value));$('#eventCoverFileInput').onchange=e=>uploadEventCover(e.target.files&&e.target.files[0]);$('#eventCoverUrlInput').oninput=e=>{pendingCoverFileId='';const value=e.target.value.trim();$('#eventCoverPreview').src=value;$('#eventCoverPreview').classList.toggle('hidden',!value)};$('#publishEventBtn').onclick=publishEvent;
   $('#stageTabs').onclick=e=>{const b=e.target.closest('[data-stage]');if(!b)return;activeStage=b.dataset.stage;$$('#stageTabs .tab').forEach(x=>x.classList.toggle('active',x===b));render()};$('#statusFilters').onclick=e=>{const b=e.target.closest('[data-status]');if(!b)return;activeStatus=b.dataset.status;$$('#statusFilters .segment').forEach(x=>x.classList.toggle('active',x===b));render()};$('#searchInput').oninput=render;$('#refreshBtn').onclick=()=>{rows=loadRows();refreshCloud()};$('#eventSelect').onchange=refreshCloud;$('#exportBtn').onclick=exportWorkbook;$('#templateBtn').onclick=()=>download('成绩导入模板.csv','车号,赛段,发车时间,收车时间,罚时,赛段用时,上传人\r\n');$('#importBtn').onclick=()=>$('#fileInput').click();$('#fileInput').onchange=e=>{const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{let imported=[];try{if(/\.xls$|\.xlsx$/i.test(f.name)){imported=importWorkbookBuffer(reader.result)}else{imported=csvParse(reader.result)}}catch(err){alert(err.message||'工作簿解析失败，请检查文件格式。');e.target.value='';return}if(!imported.length){alert('没有识别到有效车号，请检查表头和内容。');return}rows=rows.concat(imported);persist();render();alert(`已导入 ${imported.length} 条成绩到本机。`);e.target.value=''};if(/\.xls$|\.xlsx$/i.test(f.name))reader.readAsArrayBuffer(f);else reader.readAsText(f,'utf-8')};$('#closeDrawer').onclick=closeEditor;$('#drawerBackdrop').onclick=e=>{if(e.target.id==='drawerBackdrop')closeEditor()};['#editStart','#editFinish','#editPenalty'].forEach(s=>$(s).oninput=updateCalc);$('#saveBtn').onclick=()=>saveEditor('approved');$('#returnBtn').onclick=()=>saveEditor('returned');$('#navUploads').onclick=()=>alert('上传批次页面将在云端接口接入后启用。');$('#navPublished').onclick=()=>alert('发布记录页面将在云端接口接入后启用.');render();refreshCloud();
 </script>
