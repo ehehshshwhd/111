@@ -69,6 +69,12 @@ async function get(eventId, stage) {
   }
 }
 
+async function check() {
+  const db = getDatabase()
+  await db.collection('work_records').limit(1).get()
+  return true
+}
+
 async function put(eventId, stage, inputRows) {
   const db = getDatabase()
   const pair = validate(eventId, String(stage || '').toUpperCase())
@@ -92,6 +98,7 @@ module.exports = {
   authMode: accessKey
     ? 'api-key'
     : (process.env.TENCENTCLOUD_SECRETID && process.env.TENCENTCLOUD_SECRETKEY ? 'runtime-credentials' : 'missing'),
+  check,
   get,
   put
 }

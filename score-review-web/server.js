@@ -72,12 +72,32 @@ const server = http.createServer(async (req, res) => {
     try { const input = await body(req); const supplied = Buffer.from(String(input.password || '')); const expected = Buffer.from(WEB_PASSWORD); if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return send(res, 401, { ok: false, message: '网页密码错误' }); const secure = process.env.NODE_ENV === 'production' ? ' Secure;' : ''; return send(res, 200, { ok: true }, { 'Set-Cookie': `score_session=${makeSession()}; HttpOnly;${secure} SameSite=Lax; Max-Age=28800; Path=/` }) } catch (error) { return send(res, 400, { ok: false, message: error.message }) }
   }
   if (url.pathname === '/api/health' && req.method === 'GET') {
-    return send(res, 200, {
-      ok: true,
+    let cloudDatabaseConnected = false
+    let cloudDatabaseDiagnostic = cloudStore.enabled ? 'CLOUD_DB_UNCHECKED' : 'CLOUD_DISABLED'
+    if (cloudStore.enabled) {
+      try {
+        await cloudStore.check()
+        cloudDatabaseConnected = true
+        cloudDatabaseDiagnostic = 'OK'
+      } catch (error) {
+        const detail = String(error && (error.errMsg || error.message) || error)
+        const code = String(error && (error.code || error.errCode) || '')
+        if (/missing secret|secretId|secretKey|accessKey|credential/i.test(detail)) cloudDatabaseDiagnostic = 'CLOUD_AUTH_MISSING'
+        else if (/INVALID_ACCESS_TOKEN|token format/i.test(detail) || /INVALID_ACCESS_TOKEN/i.test(code)) cloudDatabaseDiagnostic = 'CLOUD_API_KEY_INVALID'
+        else if (/permission|forbidden|unauthorized|无权限|权限/i.test(detail) || /PERMISSION|FORBIDDEN/i.test(code)) cloudDatabaseDiagnostic = 'CLOUD_DB_PERMISSION_DENIED'
+        else if (/collection|502005|不存在/i.test(detail)) cloudDatabaseDiagnostic = 'CLOUD_COLLECTION_ERROR'
+        else cloudDatabaseDiagnostic = code || 'CLOUD_DB_ERROR'
+        console.error('CloudBase health check failed:', code, error && error.message || error)
+      }
+    }
+    return send(res, cloudDatabaseConnected || !cloudStore.enabled ? 200 : 503, {
+      ok: cloudDatabaseConnected || !cloudStore.enabled,
       cloudEnabled: cloudStore.enabled,
       cloudEnvConfigured: Boolean(cloudStore.env),
       cloudAuthConfigured: Boolean(cloudStore.authConfigured),
-      cloudAuthMode: cloudStore.authMode
+      cloudAuthMode: cloudStore.authMode,
+      cloudDatabaseConnected,
+      cloudDatabaseDiagnostic
     })
   }
   if (url.pathname.startsWith('/api/')) {
