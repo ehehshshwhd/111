@@ -35,8 +35,12 @@ function validSession(req) {
 function send(res, status, body, headers = {}) { const data = Buffer.from(JSON.stringify(body)); res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': data.length, 'Cache-Control': 'no-store', ...headers }); res.end(data) }
 function serve(res, urlPath) {
   const requested = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '')
-  const file = path.resolve(WEB_ROOT, requested)
-  if (!file.startsWith(path.resolve(WEB_ROOT) + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, { ok: false, message: '页面不存在' })
+  const templateCover = requested === 'event-template-cover.jpg'
+    ? (fs.existsSync(path.join(WEB_ROOT, requested)) ? path.join(WEB_ROOT, requested) : path.resolve(WEB_ROOT, '..', 'racing-app', 'assets', 'events', 'event2-poster-crop.jpg'))
+    : null
+  const file = templateCover || path.resolve(WEB_ROOT, requested)
+  const isBundledTemplateCover = requested === 'event-template-cover.jpg' && templateCover === file
+  if ((!file.startsWith(path.resolve(WEB_ROOT) + path.sep) && !isBundledTemplateCover) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, { ok: false, message: '页面不存在' })
   const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg' }
   let data = fs.readFileSync(file)
   if (path.basename(file) === 'index.html' && process.env.SCORE_REVIEW_API_BASE === 'same-origin') {
@@ -44,7 +48,7 @@ function serve(res, urlPath) {
   }
   res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': 'no-store' }); res.end(data)
 }
-function body(req) { return new Promise((resolve, reject) => { let value = ''; req.on('data', chunk => { value += chunk; if (value.length > 2 * 1024 * 1024) reject(new Error('请求过大')) }); req.on('end', () => { try { resolve(value ? JSON.parse(value) : {}) } catch { reject(new Error('请求格式无效')) } }); req.on('error', reject) }) }
+function body(req) { return new Promise((resolve, reject) => { let value = ''; req.on('data', chunk => { value += chunk; if (value.length > 8 * 1024 * 1024) reject(new Error('请求过大')) }); req.on('end', () => { try { resolve(value ? JSON.parse(value) : {}) } catch { reject(new Error('请求格式无效')) } }); req.on('error', reject) }) }
 function key(eventId, stage) { return `${String(eventId || 'default').slice(0, 100)}::${String(stage || '').toUpperCase()}` }
 function cloudError(res, error) {
   const rawMessage = String(error && (error.errMsg || error.message) || error)
@@ -100,9 +104,32 @@ const server = http.createServer(async (req, res) => {
       cloudDatabaseDiagnostic
     })
   }
+  if (url.pathname === '/api/public/events' && req.method === 'GET') {
+    try {
+      const events = cloudStore.enabled
+        ? await cloudStore.listEvents({ publishedOnly: true })
+        : (readData().events || []).filter(event => event.published !== false).sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0))
+      return send(res, 200, { ok: true, events })
+    } catch (error) { return cloudError(res, error) }
+  }
   if (url.pathname.startsWith('/api/')) {
     if (!validSession(req)) return send(res, 401, { ok: false, message: '请先登录网页后台' })
     if (url.pathname === '/api/session' && req.method === 'GET') return send(res, 200, { ok: true })
+    if (url.pathname === '/api/events' && req.method === 'POST') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '赛事发布需要先连接 CloudBase；当前服务未配置云端数据库。' })
+        const input = await body(req)
+        const event = await cloudStore.saveEvent(input)
+        return send(res, 200, { ok: true, event })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '赛事保存失败' }) }
+    }
+    if (url.pathname === '/api/event-covers' && req.method === 'POST') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '上传封面需要连接 CloudBase 云存储' })
+        const result = await cloudStore.uploadEventCover(await body(req))
+        return send(res, 200, { ok: true, ...result })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '封面上传失败' }) }
+    }
     if (url.pathname === '/api/work-records' && req.method === 'GET') {
       const eventId = String(url.searchParams.get('eventId') || 'default').slice(0, 100); const stage = String(url.searchParams.get('stage') || '').toUpperCase()
       if (!/^SS[1-9]$/.test(stage)) return send(res, 400, { ok: false, message: '赛段无效' })
@@ -118,4 +145,5 @@ const server = http.createServer(async (req, res) => {
   }
   serve(res, url.pathname)
 })
+
 server.listen(PORT, HOST, () => console.log(`成绩审核网页已启动，监听 ${HOST}:${PORT}；数据存储：${cloudStore.enabled ? `CloudBase ${cloudStore.env}` : '本机 JSON 文件'}`))
