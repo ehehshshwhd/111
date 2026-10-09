@@ -26,6 +26,18 @@ function cleanStageNames(values) {
     .sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)))
 }
 
+function cleanGroupStageNames(value, allowedStages = STAGES) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const allowed = allowedStages instanceof Set ? allowedStages : new Set(cleanStageNames(allowedStages))
+  const result = {}
+  for (const [rawGroup, rawStages] of Object.entries(value).slice(0, 100)) {
+    const group = String(rawGroup || '').trim().slice(0, 100)
+    if (!group) continue
+    result[group] = cleanStageNames(rawStages).filter(stage => allowed.has(stage))
+  }
+  return result
+}
+
 function getDatabase() {
   if (!env) throw new Error('未配置 SCORE_REVIEW_CLOUDBASE_ENV')
   if (!database) {
@@ -40,6 +52,8 @@ function getDatabase() {
 
 function cleanEvent(input, id) {
   const source = input || {}
+  const stageNames = cleanStageNames(source.stageNames)
+  const allowedStages = stageNames.length ? stageNames : STAGES
   return {
     id: String(id || source.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80),
     title: String(source.title || '').trim().slice(0, 160),
@@ -57,7 +71,8 @@ function cleanEvent(input, id) {
     coverFileId: String(source.coverFileId || '').trim().slice(0, 500),
     groups: cleanGroupNames(source.groups),
     visibleGroups: cleanGroupNames(source.visibleGroups),
-    stageNames: cleanStageNames(source.stageNames),
+    stageNames,
+    groupStageNames: cleanGroupStageNames(source.groupStageNames, allowedStages),
     scoringType: String(source.scoringType || 'rally').toLowerCase() === 'points' ? 'points' : 'rally',
     rankingMode: String(source.rankingMode || 'best').toLowerCase() === 'total' ? 'total' : 'best',
     registrationEnabled: source.registrationEnabled === true,
@@ -432,13 +447,15 @@ async function put(eventId, stage, inputRows) {
 
 function cleanPublishedResults(record, eventId = '') {
   const source = record || {}
+  const stageNames = Array.isArray(source.stageNames) ? cleanStageNames(source.stageNames) : []
   return {
     ok: true,
     eventId: String(source.eventId || eventId || ''),
     publishedAt: source.publishedAt || null,
     rankingMode: source.rankingMode === 'total' ? 'total' : 'best',
     groups: cleanGroupNames(source.groups),
-    stageNames: Array.isArray(source.stageNames) ? source.stageNames.filter(stage => STAGES.has(stage)) : [],
+    stageNames,
+    groupStageNames: cleanGroupStageNames(source.groupStageNames, stageNames.length ? stageNames : STAGES),
     rows: Array.isArray(source.rows) ? source.rows : []
   }
 }
@@ -452,7 +469,7 @@ async function getPublishedResults(eventId) {
   return cleanPublishedResults(result.data && result.data[0], id)
 }
 
-async function publishResults(eventId, visibleGroups, rankingMode) {
+async function publishResults(eventId, visibleGroups, rankingMode, requestedGroupStageNames) {
   const id = String(eventId || '').trim().slice(0, 100)
   if (!id) throw new Error('请先选择赛事')
   const db = getDatabase()
@@ -464,19 +481,30 @@ async function publishResults(eventId, visibleGroups, rankingMode) {
   const storedEvent = eventResult.data && eventResult.data[0]
   if (!storedEvent) throw new Error('没有找到该赛事，请先保存并发布赛事信息')
   const event = cleanEvent(storedEvent, storedEvent.id || storedEvent._id)
+  const hasRequestedGroupStageNames = requestedGroupStageNames && typeof requestedGroupStageNames === 'object' && !Array.isArray(requestedGroupStageNames) && Object.keys(requestedGroupStageNames).length > 0
+  const sourceGroupStageNames = hasRequestedGroupStageNames ? requestedGroupStageNames : event.groupStageNames
   const requestedGroups = cleanGroupNames(Array.isArray(visibleGroups) ? visibleGroups : event.visibleGroups)
   // Older events predate group metadata. Let the first explicit publication
   // configure their group list instead of forcing the admin to recreate them.
   // The web checklist can include groups found on imported/legacy score rows.
   // Persist explicitly selected names too, so they are not silently discarded
   // when an older event has incomplete group metadata.
-  const availableGroups = cleanGroupNames([...cleanGroupNames(event.groups), ...requestedGroups])
+  const availableGroups = cleanGroupNames([
+    ...cleanGroupNames(event.groups),
+    ...requestedGroups,
+    ...Object.keys(sourceGroupStageNames || {})
+  ])
   const groups = requestedGroups.filter(group => availableGroups.includes(group))
   if (!Array.isArray(visibleGroups) && !groups.length) throw new Error('请先配置本场赛事的可展示组别')
   const mode = rankingMode === 'total' ? 'total' : 'best'
   const selectedGroups = new Set(groups)
   const configuredStages = event.stageNames.length ? new Set(event.stageNames) : STAGES
-  const stageEntries = await Promise.all([...configuredStages].map(async stage => [stage, await get(id, stage)]))
+  const groupStageNames = cleanGroupStageNames(sourceGroupStageNames, configuredStages)
+  const hasGroupStageConfig = hasRequestedGroupStageNames || Object.keys(event.groupStageNames).length > 0
+  const stagesToRead = hasGroupStageConfig
+    ? new Set(groups.flatMap(group => groupStageNames[group] || []))
+    : configuredStages
+  const stageEntries = await Promise.all([...stagesToRead].map(async stage => [stage, await get(id, stage)]))
   const byCar = new Map()
   const stagesWithData = new Set()
   let approvedWithoutGroup = 0
@@ -487,6 +515,7 @@ async function publishResults(eventId, visibleGroups, rankingMode) {
       if (!selectedGroups.size) continue
       if (!row.group) { approvedWithoutGroup += 1; continue }
       if (!selectedGroups.has(row.group)) continue
+      if (hasGroupStageConfig && !(groupStageNames[row.group] || []).includes(stage)) continue
       const times = resultTimes(row)
       if (!times || times.effective <= 0) continue
       const carNumber = row.carNumber
@@ -549,11 +578,30 @@ async function publishResults(eventId, visibleGroups, rankingMode) {
   }
 
   const publishedGroups = groups.filter(group => grouped.get(group) && grouped.get(group).length)
+  const publishedGroupStageNames = Object.fromEntries(publishedGroups.map(group => [
+    group,
+    cleanStageNames((grouped.get(group) || []).flatMap(row => Object.keys(row.stageTimes)))
+  ]))
   const publishedAt = new Date().toISOString()
-  const snapshot = { eventId: id, publishedAt, rankingMode: mode, groups: publishedGroups, stageNames, rows }
+  const snapshot = {
+    eventId: id,
+    publishedAt,
+    rankingMode: mode,
+    groups: publishedGroups,
+    stageNames,
+    groupStageNames: publishedGroupStageNames,
+    rows
+  }
+  const persistedGroupStageNames = hasGroupStageConfig ? groupStageNames : event.groupStageNames
   if (JSON.stringify(cleanGroupNames(event.groups)) !== JSON.stringify(availableGroups)
-    || JSON.stringify(cleanGroupNames(event.visibleGroups)) !== JSON.stringify(publishedGroups)) {
-    await db.collection('events').doc(storedEvent._id).update({ groups: availableGroups, visibleGroups: publishedGroups, updatedAt: new Date() })
+    || JSON.stringify(cleanGroupNames(event.visibleGroups)) !== JSON.stringify(publishedGroups)
+    || JSON.stringify(event.groupStageNames) !== JSON.stringify(persistedGroupStageNames)) {
+    await db.collection('events').doc(storedEvent._id).update({
+      groups: availableGroups,
+      visibleGroups: publishedGroups,
+      groupStageNames: persistedGroupStageNames,
+      updatedAt: new Date()
+    })
   }
   const existing = await db.collection('published_results').where({ eventId: id }).limit(1).get()
   if (existing.data && existing.data.length) await db.collection('published_results').doc(existing.data[0]._id).update(snapshot)

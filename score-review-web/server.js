@@ -145,7 +145,7 @@ const server = http.createServer(async (req, res) => {
       try {
         if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '发布成绩需要连接 CloudBase；当前服务未配置云端数据库。' })
         const input = await body(req)
-        const result = await cloudStore.publishResults(input.eventId, input.visibleGroups, input.rankingMode)
+        const result = await cloudStore.publishResults(input.eventId, input.visibleGroups, input.rankingMode, input.groupStageNames)
         return send(res, 200, { ok: true, ...result })
       } catch (error) { return send(res, 400, { ok: false, message: error.message || '成绩发布失败' }) }
     }
