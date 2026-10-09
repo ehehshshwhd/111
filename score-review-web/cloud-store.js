@@ -7,10 +7,23 @@ let cloudClient
 let collectionReady
 let eventsCollectionReady
 let publishedResultsCollectionReady
+let permissionsCollectionsReady
+
+const PERMISSION_STAGES = Array.from(STAGES)
+const ENTRY_PERMISSION_KEYS = ['startTime', 'endTime', 'penalty']
+const SUPER_ADMIN_PHONE = String(process.env.SCORE_REVIEW_SUPER_ADMIN_PHONE || '13729912574')
+  .replace(/\D/g, '')
+  .replace(/^86(?=1\d{10}$)/, '')
 
 function cleanGroupNames(values) {
   if (!Array.isArray(values)) return []
   return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100)
+}
+
+function cleanStageNames(values) {
+  if (!Array.isArray(values)) return []
+  return [...new Set(values.map(value => String(value || '').trim().toUpperCase()).filter(stage => STAGES.has(stage)))]
+    .sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)))
 }
 
 function getDatabase() {
@@ -38,10 +51,16 @@ function cleanEvent(input, id) {
     status: String(source.status || '报名中').trim().slice(0, 30),
     notice: String(source.notice || '').trim().slice(0, 240),
     detailText: String(source.detailText || '').trim().slice(0, 10000),
+    rulesText: String(source.rulesText || '').trim().slice(0, 10000),
+    awardsText: String(source.awardsText || '').trim().slice(0, 10000),
     coverUrl: String(source.coverUrl || '').trim().slice(0, 2000),
     coverFileId: String(source.coverFileId || '').trim().slice(0, 500),
     groups: cleanGroupNames(source.groups),
     visibleGroups: cleanGroupNames(source.visibleGroups),
+    stageNames: cleanStageNames(source.stageNames),
+    scoringType: String(source.scoringType || 'rally').toLowerCase() === 'points' ? 'points' : 'rally',
+    rankingMode: String(source.rankingMode || 'best').toLowerCase() === 'total' ? 'total' : 'best',
+    registrationEnabled: source.registrationEnabled === true,
     published: source.published !== false,
     templateEventId: String(source.templateEventId || '').slice(0, 80),
     publishedAt: source.publishedAt || null,
@@ -123,6 +142,142 @@ async function uploadEventCover({ fileName, mimeType, data }) {
   const uploaded = await cloudClient.uploadFile({ cloudPath, fileContent: file })
   const urls = await cloudClient.getTempFileURL({ fileList: [{ fileID: uploaded.fileID, maxAge: 3600 }] })
   return { coverFileId: uploaded.fileID, coverUrl: urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || '' }
+}
+
+function normalizePermissionPhone(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 15)
+}
+
+function isSuperAdminPhone(value) {
+  const phone = normalizePermissionPhone(value)
+  return phone === SUPER_ADMIN_PHONE || phone === `86${SUPER_ADMIN_PHONE}`
+}
+
+function normalizePermissionStages(value) {
+  if (!Array.isArray(value)) return PERMISSION_STAGES.slice()
+  return [...new Set(value.map(item => String(item || '').toUpperCase()).filter(stage => STAGES.has(stage)))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)))
+}
+
+function normalizeEntryPermissions(value, role = 'staff') {
+  if (role === 'admin') return { startTime: true, endTime: true, penalty: true }
+  const source = value && typeof value === 'object' ? value : {}
+  return Object.fromEntries(ENTRY_PERMISSION_KEYS.map(key => [key, source[key] !== false]))
+}
+
+function permissionView(record, role) {
+  return {
+    id: String(record && (record._id || record.id) || ''),
+    phoneNumber: normalizePermissionPhone(record && record.phoneNumber),
+    countryCode: String(record && record.countryCode || '86').slice(0, 6),
+    label: String(record && record.label || '').trim().slice(0, 30),
+    enabled: record ? record.enabled !== false : false,
+    role,
+    isSuperAdmin: isSuperAdminPhone(record && record.phoneNumber),
+    stagePermissions: role === 'admin' ? PERMISSION_STAGES.slice() : normalizePermissionStages(record && record.stagePermissions),
+    entryPermissions: normalizeEntryPermissions(record && record.entryPermissions, role),
+    createdAt: record && record.createdAt || null,
+    updatedAt: record && record.updatedAt || null
+  }
+}
+
+async function ensurePermissionsCollections(db) {
+  if (!permissionsCollectionsReady) {
+    permissionsCollectionsReady = Promise.all(['admin_users', 'staff_users'].map(async name => {
+      try {
+        await db.collection(name).limit(1).get()
+      } catch (error) {
+        const message = String(error && (error.errMsg || error.message) || error)
+        if (!message.includes('-502005') && !/collection.*(not exist|doesn't exist|不存在)/i.test(message)) throw error
+        try { await db.createCollection(name) } catch { await db.collection(name).limit(1).get() }
+      }
+    })).catch(error => {
+      permissionsCollectionsReady = null
+      throw error
+    })
+  }
+  return permissionsCollectionsReady
+}
+
+async function permissionRows(db, collection, phoneNumber, countryCode) {
+  const query = db.collection(collection)
+  if (phoneNumber) {
+    const result = await query.where({ phoneNumber, countryCode }).limit(20).get()
+    return result.data || []
+  }
+  const result = await query.limit(200).get()
+  return result.data || []
+}
+
+async function listPermissions() {
+  const db = getDatabase()
+  await ensurePermissionsCollections(db)
+  const [admins, staff] = await Promise.all([permissionRows(db, 'admin_users'), permissionRows(db, 'staff_users')])
+  const sortRows = rows => rows.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+  return {
+    admins: sortRows(admins).map(item => permissionView(item, 'admin')),
+    staff: sortRows(staff).map(item => permissionView(item, 'staff'))
+  }
+}
+
+function assertPermissionInput(input) {
+  const phoneNumber = normalizePermissionPhone(input && input.phoneNumber)
+  if (phoneNumber.length < 5) throw new Error('请输入正确的手机号')
+  const role = String(input && input.role || 'staff').toLowerCase() === 'admin' ? 'admin' : 'staff'
+  const stagePermissions = normalizePermissionStages(input && input.stagePermissions)
+  if (role === 'staff' && stagePermissions.length === 0) throw new Error('工作人员至少需要一个赛段权限')
+  return { phoneNumber, role, stagePermissions, countryCode: String(input && input.countryCode || '86').slice(0, 6), label: String(input && input.label || '').trim().slice(0, 30), entryPermissions: normalizeEntryPermissions(input && input.entryPermissions, role) }
+}
+
+async function upsertPermission(input) {
+  const db = getDatabase()
+  await ensurePermissionsCollections(db)
+  const normalized = assertPermissionInput(input)
+  if (isSuperAdminPhone(normalized.phoneNumber)) {
+    if (normalized.role !== 'admin') throw new Error('最高管理员不能改为工作人员')
+    return listPermissions()
+  }
+  const adminMatches = await permissionRows(db, 'admin_users', normalized.phoneNumber, normalized.countryCode)
+  if (adminMatches.length && normalized.role !== 'admin') throw new Error('管理员不能降级为工作人员')
+  const collection = normalized.role === 'admin' ? 'admin_users' : 'staff_users'
+  const otherCollection = normalized.role === 'admin' ? 'staff_users' : 'admin_users'
+  const now = new Date()
+  const data = { phoneNumber: normalized.phoneNumber, countryCode: normalized.countryCode, label: normalized.label, enabled: true, stagePermissions: normalized.stagePermissions, entryPermissions: normalized.entryPermissions, updatedAt: now }
+  const existing = await permissionRows(db, collection, normalized.phoneNumber, normalized.countryCode)
+  if (existing.length) await db.collection(collection).doc(existing[0]._id).update(data)
+  else await db.collection(collection).add({ ...data, createdAt: now })
+  const duplicates = await permissionRows(db, otherCollection, normalized.phoneNumber, normalized.countryCode)
+  await Promise.all(duplicates.map(item => db.collection(otherCollection).doc(item._id).remove()))
+  return listPermissions()
+}
+
+async function updatePermission(input) {
+  const db = getDatabase()
+  await ensurePermissionsCollections(db)
+  const role = String(input && input.role || 'staff').toLowerCase() === 'admin' ? 'admin' : 'staff'
+  const id = String(input && input.id || '').trim()
+  if (!id) throw new Error('权限记录不存在')
+  const collection = role === 'admin' ? 'admin_users' : 'staff_users'
+  const result = await db.collection(collection).doc(id).get()
+  const record = result.data
+  if (!record) throw new Error('权限记录不存在')
+  if (isSuperAdminPhone(record.phoneNumber)) throw new Error('最高管理员不能停用')
+  await db.collection(collection).doc(id).update({ enabled: input && input.enabled !== false, updatedAt: new Date() })
+  return listPermissions()
+}
+
+async function deletePermission(input) {
+  const db = getDatabase()
+  await ensurePermissionsCollections(db)
+  const role = String(input && input.role || 'staff').toLowerCase() === 'admin' ? 'admin' : 'staff'
+  const id = String(input && input.id || '').trim()
+  if (!id) throw new Error('权限记录不存在')
+  const collection = role === 'admin' ? 'admin_users' : 'staff_users'
+  const result = await db.collection(collection).doc(id).get()
+  const record = result.data
+  if (!record) throw new Error('权限记录不存在')
+  if (isSuperAdminPhone(record.phoneNumber)) throw new Error('最高管理员不能移除')
+  await db.collection(collection).doc(id).remove()
+  return listPermissions()
 }
 
 function cleanRows(rows) {
@@ -320,7 +475,8 @@ async function publishResults(eventId, visibleGroups, rankingMode) {
   if (!Array.isArray(visibleGroups) && !groups.length) throw new Error('请先配置本场赛事的可展示组别')
   const mode = rankingMode === 'total' ? 'total' : 'best'
   const selectedGroups = new Set(groups)
-  const stageEntries = await Promise.all(Array.from(STAGES, async stage => [stage, await get(id, stage)]))
+  const configuredStages = event.stageNames.length ? new Set(event.stageNames) : STAGES
+  const stageEntries = await Promise.all([...configuredStages].map(async stage => [stage, await get(id, stage)]))
   const byCar = new Map()
   const stagesWithData = new Set()
   let approvedWithoutGroup = 0
@@ -419,5 +575,9 @@ module.exports = {
   publishResults,
   listEvents,
   saveEvent,
-  uploadEventCover
+  uploadEventCover,
+  listPermissions,
+  upsertPermission,
+  updatePermission,
+  deletePermission
 }

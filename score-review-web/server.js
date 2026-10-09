@@ -50,10 +50,18 @@ function serve(res, urlPath) {
 }
 function body(req) { return new Promise((resolve, reject) => { let value = ''; req.on('data', chunk => { value += chunk; if (value.length > 8 * 1024 * 1024) reject(new Error('请求过大')) }); req.on('end', () => { try { resolve(value ? JSON.parse(value) : {}) } catch { reject(new Error('请求格式无效')) } }); req.on('error', reject) }) }
 function key(eventId, stage) { return `${String(eventId || 'default').slice(0, 100)}::${String(stage || '').toUpperCase()}` }
+function publicEventView(event) {
+  const detailParts = [
+    String(event.detailText || '').trim(),
+    event.rulesText ? `竞赛规则\n${String(event.rulesText).trim()}` : '',
+    event.awardsText ? `奖项设置\n${String(event.awardsText).trim()}` : ''
+  ].filter(Boolean)
+  return { ...event, editorDetailText: String(event.detailText || ''), detailText: detailParts.join('\n\n') }
+}
 function cloudError(res, error) {
   const rawMessage = String(error && (error.errMsg || error.message) || error)
   const rawCode = String(error && (error.code || error.errCode) || '')
-  console.error('CloudBase work_records request failed:', error && (error.stack || error.message) || error)
+  console.error('CloudBase request failed:', error && (error.stack || error.message) || error)
   let message = 'CloudBase 数据库暂时不可用，请检查云托管环境变量和数据库权限。'
   let diagnosticCode = rawCode || 'CLOUD_DB_ERROR'
   if (/未配置 SCORE_REVIEW_CLOUDBASE_ENV/i.test(rawMessage)) {
@@ -63,7 +71,7 @@ function cloudError(res, error) {
     message = 'CloudBase 鉴权失败，请在云托管环境变量中配置 CLOUDBASE_API_KEY，并确认该密钥属于当前环境。'
     diagnosticCode = rawCode || 'CLOUD_AUTH_ERROR'
   } else if (/collection|502005|不存在/i.test(rawMessage)) {
-    message = 'CloudBase 的 work_records 集合不可用，请检查数据库集合和服务权限。'
+    message = 'CloudBase 数据集合不可用，请检查数据库集合和服务权限。'
     diagnosticCode = rawCode || 'CLOUD_COLLECTION_ERROR'
   }
   return send(res, 503, { ok: false, message, diagnosticCode })
@@ -109,7 +117,7 @@ const server = http.createServer(async (req, res) => {
       const events = cloudStore.enabled
         ? await cloudStore.listEvents({ publishedOnly: true })
         : (readData().events || []).filter(event => event.published !== false).sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0))
-      return send(res, 200, { ok: true, events })
+      return send(res, 200, { ok: true, events: events.map(publicEventView) })
     } catch (error) { return cloudError(res, error) }
   }
   if (url.pathname === '/api/public/results' && req.method === 'GET') {
@@ -147,6 +155,34 @@ const server = http.createServer(async (req, res) => {
         const result = await cloudStore.uploadEventCover(await body(req))
         return send(res, 200, { ok: true, ...result })
       } catch (error) { return send(res, 400, { ok: false, message: error.message || '封面上传失败' }) }
+    }
+    if (url.pathname === '/api/permissions' && req.method === 'GET') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '权限管理需要先连接 CloudBase；当前服务未配置云端数据库。' })
+        const permissions = await cloudStore.listPermissions()
+        return send(res, 200, { ok: true, ...permissions })
+      } catch (error) { return cloudError(res, error) }
+    }
+    if (url.pathname === '/api/permissions' && req.method === 'POST') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '权限管理需要先连接 CloudBase；当前服务未配置云端数据库。' })
+        const permissions = await cloudStore.upsertPermission(await body(req))
+        return send(res, 200, { ok: true, ...permissions })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '权限保存失败' }) }
+    }
+    if (url.pathname === '/api/permissions' && req.method === 'PATCH') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '权限管理需要先连接 CloudBase；当前服务未配置云端数据库。' })
+        const permissions = await cloudStore.updatePermission(await body(req))
+        return send(res, 200, { ok: true, ...permissions })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '权限状态更新失败' }) }
+    }
+    if (url.pathname === '/api/permissions' && req.method === 'DELETE') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '权限管理需要先连接 CloudBase；当前服务未配置云端数据库。' })
+        const permissions = await cloudStore.deletePermission(await body(req))
+        return send(res, 200, { ok: true, ...permissions })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '权限删除失败' }) }
     }
     if (url.pathname === '/api/work-records' && req.method === 'GET') {
       const eventId = String(url.searchParams.get('eventId') || 'default').slice(0, 100); const stage = String(url.searchParams.get('stage') || '').toUpperCase()
