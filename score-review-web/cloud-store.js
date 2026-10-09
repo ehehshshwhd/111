@@ -593,12 +593,13 @@ async function publishResults(eventId, visibleGroups, rankingMode, requestedGrou
     rows
   }
   const persistedGroupStageNames = hasGroupStageConfig ? groupStageNames : event.groupStageNames
+  const persistedVisibleGroups = hasGroupStageConfig ? groups : publishedGroups
   if (JSON.stringify(cleanGroupNames(event.groups)) !== JSON.stringify(availableGroups)
-    || JSON.stringify(cleanGroupNames(event.visibleGroups)) !== JSON.stringify(publishedGroups)
+    || JSON.stringify(cleanGroupNames(event.visibleGroups)) !== JSON.stringify(persistedVisibleGroups)
     || JSON.stringify(event.groupStageNames) !== JSON.stringify(persistedGroupStageNames)) {
     await db.collection('events').doc(storedEvent._id).update({
       groups: availableGroups,
-      visibleGroups: publishedGroups,
+      visibleGroups: persistedVisibleGroups,
       groupStageNames: persistedGroupStageNames,
       updatedAt: new Date()
     })
