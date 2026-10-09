@@ -38,6 +38,19 @@ function cleanGroupStageNames(value, allowedStages = STAGES) {
   return result
 }
 
+function cleanSignupOptions(value) {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 100).map(item => {
+    const option = item && typeof item === 'object' ? item : { name: item }
+    return {
+      name: String(option.name || '').trim().slice(0, 120),
+      fee: String(option.fee || '').trim().slice(0, 80),
+      quota: String(option.quota || '').trim().slice(0, 80),
+      note: String(option.note || '').trim().slice(0, 500)
+    }
+  }).filter(item => item.name)
+}
+
 function getDatabase() {
   if (!env) throw new Error('未配置 SCORE_REVIEW_CLOUDBASE_ENV')
   if (!database) {
@@ -67,6 +80,12 @@ function cleanEvent(input, id) {
     detailText: String(source.detailText || '').trim().slice(0, 10000),
     rulesText: String(source.rulesText || '').trim().slice(0, 10000),
     awardsText: String(source.awardsText || '').trim().slice(0, 10000),
+    registrationDeadline: String(source.registrationDeadline || '').trim().slice(0, 30),
+    contactName: String(source.contactName || '').trim().slice(0, 80),
+    contactPhone: String(source.contactPhone || '').trim().slice(0, 40),
+    contactWechat: String(source.contactWechat || '').trim().slice(0, 80),
+    registrationNote: String(source.registrationNote || '').trim().slice(0, 5000),
+    signupOptions: cleanSignupOptions(source.signupOptions),
     coverUrl: String(source.coverUrl || '').trim().slice(0, 2000),
     coverFileId: String(source.coverFileId || '').trim().slice(0, 500),
     groups: cleanGroupNames(source.groups),
@@ -76,6 +95,7 @@ function cleanEvent(input, id) {
     scoringType: String(source.scoringType || 'rally').toLowerCase() === 'points' ? 'points' : 'rally',
     rankingMode: String(source.rankingMode || 'best').toLowerCase() === 'total' ? 'total' : 'best',
     registrationEnabled: source.registrationEnabled === true,
+    workBackendEnabled: source.workBackendEnabled !== false,
     published: source.published !== false,
     templateEventId: String(source.templateEventId || '').slice(0, 80),
     publishedAt: source.publishedAt || null,

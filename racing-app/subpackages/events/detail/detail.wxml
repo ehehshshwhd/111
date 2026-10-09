@@ -1,0 +1,279 @@
+<view class="detail-page-root">
+  <scroll-view class="detail-scroll" scroll-y show-scrollbar="false">
+    <view class="detail-content">
+      <view class="intro-block">
+        <view class="event-title">{{event.title}}</view>
+        <view class="top-meta">
+          <view class="meta-item"><view class="clock-icon"></view><text>{{event.date}}</text></view>
+          <view class="meta-item views"><view class="eye-icon"></view><text>3884</text></view>
+          <text class="finish">{{event.status}}</text>
+        </view>
+        <view wx:if="{{event.notice}}" class="notice" bindtap="showNotice"><text>{{event.notice}}</text><text class="notice-arrow">›</text></view>
+      </view>
+
+      <view wx:if="{{event && event.signup && event.signup.length}}" class="section signup-section">
+        <view class="section-title">赛事报名</view>
+        <view class="signup-list">
+          <view class="signup-row" wx:for="{{event.signup}}" wx:key="*this"><text>{{item}}</text></view>
+        </view>
+      </view>
+
+      <view wx:if="{{event && event.isDynamic && (event.registrationNote || (event.signupOptions && event.signupOptions.length))}}" class="section signup-section generic-signup-section">
+        <view class="section-title">赛事报名</view>
+        <view wx:if="{{event.registrationNote}}" class="prose generic-detail-copy">{{event.registrationNote}}</view>
+        <view wx:if="{{event.signupOptions && event.signupOptions.length}}" class="signup-list">
+          <view class="signup-row generic-signup-row" wx:for="{{event.signupOptions}}" wx:key="index">
+            <view class="generic-signup-main"><text class="generic-signup-name">{{item.name}}</text><text wx:if="{{item.fee}}" class="generic-signup-meta">费用：{{item.fee}}</text><text wx:if="{{item.quota}}" class="generic-signup-meta">名额：{{item.quota}}</text></view>
+            <text wx:if="{{item.note}}" class="generic-signup-note">{{item.note}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="action-row detail-entry-actions"><button class="primary-btn" bindtap="openResults">查看成绩详情</button><button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button></view>
+
+      <view wx:if="{{event.isGeneric}}" class="section info-section generic-event-info">
+        <view class="section-title">赛事信息</view>
+        <view wx:if="{{event.dateFull || event.date}}" class="info-line"><text class="info-label">比赛时间：</text><text>{{event.dateFull || event.date}}</text></view>
+        <view wx:if="{{event.registrationDeadline}}" class="info-line"><text class="info-label">报名截止：</text><text>{{event.registrationDeadline}}</text></view>
+        <view wx:if="{{event.location}}" class="info-line"><text class="info-label">集合地址：</text><text>{{event.location}}</text></view>
+        <view wx:if="{{event.contactName}}" class="info-line"><text class="info-label">联系人：</text><text>{{event.contactName}}</text></view>
+        <view wx:if="{{event.contactPhone}}" class="info-line"><text class="info-label">联系电话：</text><text>{{event.contactPhone}}</text></view>
+        <view wx:if="{{event.contactWechat}}" class="info-line"><text class="info-label">微信号：</text><text>{{event.contactWechat}}</text></view>
+        <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
+        <view wx:if="{{event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
+      </view>
+      <view wx:else class="section info-section">
+        <view class="section-title">赛事信息</view>
+        <view class="info-line"><text class="info-label">比赛时间：</text><text>{{event.dateFull}}</text></view>
+        <view class="info-line"><text class="info-label">报名截止：</text><text>2026-08-22</text></view>
+        <view class="info-line"><text class="info-label">集合地址：</text><text>{{event.location}}</text></view>
+        <view class="info-line"><text class="info-label">联系人：</text><text>马银鹏</text></view>
+        <view class="info-line contact"><text class="info-label">联系电话：</text><text class="phone">13269191919(点击拨打)</text></view>
+        <view class="info-line"><text class="info-label">微信号：</text><text>13269191919</text></view>
+      </view>
+
+      <view wx:if="{{event && event.isDynamic && event.rulesText}}" class="section generic-copy-section">
+        <view class="section-title">竞赛规则</view>
+        <view class="prose generic-detail-copy">{{event.rulesText}}</view>
+      </view>
+      <view wx:if="{{event && event.isDynamic && event.awardsText}}" class="section generic-copy-section">
+        <view class="section-title">奖项设置</view>
+        <view class="prose generic-detail-copy">{{event.awardsText}}</view>
+      </view>
+
+      <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic}}" class="separator"></view>
+      <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic}}" class="moments section">
+        <view class="section-title no-border">精彩瞬间</view>
+        <button class="publish-btn" bindtap="publishMoment"><text>＋</text> 发布动态</button>
+      </view>
+
+      <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic}}" class="separator"></view>
+      <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic && detailReady}}" class="race-detail section">
+        <view class="section-title no-border">赛事详情</view>
+        <image class="detail-poster" src="/assets/events/event2-poster-crop.jpg" mode="widthFix" lazy-load="true" />
+        <view class="prose lead"><text class="lead-label">前言：</text><text>嵖岈山为国家5A级旅游景区，坐落于河南省驻马店市遂平县城西25公里。本次活动地点定于嵖岈山有全香园区举办，以“中国·遂平嵖岈山首届坦克汽车定向集结赛”“中国·遂平嵖岈山汽车场地越野职业联赛”“中国·遂平嵖岈山汽车城市攀爬巡回赛”三大赛事为核心，以“三大赛事”重灵魂共鸣，依托天中文化载体，集多IP专业汽车赛事、文旅休闲与地方特色于一体的体育文旅融合标杆项目，唤醒这片历经7000万年自然风化雕凿而成的中原盆景，聚力打造国内知名汽车运动目的地，为推进驻马店文旅新业态的高质量发展奠定基础！</text></view>
+        <view class="prose"><text>活动总称：2026中国·嵖岈山首届汽车越野嘉年华</text></view>
+        <view class="prose"><text>活动主题：“赛车视界·逐鹿中原”</text></view>
+
+        <image class="stage-image" src="/subpackages/events/assets/stage-01.jpg" mode="widthFix" />
+        <view class="sub-title">（一）相关时间、地点</view>
+        <view class="prose numbered">1、报到时间：2026年8月21日-22日</view>
+        <view class="prose numbered">2、开幕式发车仪式时间：8月23日上午</view>
+        <view class="prose numbered">3、比赛时间：8月23日-24日</view>
+        <view class="sub-title">（二）相关地点</view>
+        <view class="prose numbered">1、报到地点：河南省遂平县</view>
+        <view class="prose numbered">2、开幕式发车仪式地点：</view>
+        <view class="prose numbered">3、比赛线路：</view>
+        <view class="prose numbered">3.1（SS1赛段）遂平县-西平县-上蔡县-汝南县-平舆县-新蔡县</view>
+        <view class="prose numbered">3.2（SS2赛段）新蔡县-正阳县-泌阳县-确山县-驻马店市-嵖岈山</view>
+
+        <view class="sub-title">（三）组别设置</view>
+        <view class="prose numbered">1、公开A组：50辆</view>
+        <view class="prose numbered">2、公开B组：50辆</view>
+        <view class="prose numbered">3、公开C组：50辆</view>
+        <view class="prose numbered">4、公开D组：50辆</view>
+        <view class="prose note"><text class="note-label">备注：</text>汽车定向集结赛仅接受坦克系列四驱车型参加，各组别分别限定50辆报名，A组报满后陆续开启B组、C组、D组、E组、F组报名通道，以此类推。组别内不满50辆时，录取名次奖金减半发放，不满25辆时则取消该小组。</view>
+
+        <view class="sub-title">（四）奖金设置</view>
+        <block wx:for="{{prizeTables}}" wx:for-item="prize" wx:for-index="prizeIndex" wx:key="title">
+          <view wx:if="{{prize.type === 'open-groups'}}" class="prize-block prize-{{prize.theme}}">
+            <view class="prize-title">{{prize.title}}</view>
+            <view class="group-head-row">
+              <view wx:for="{{prize.groups}}" wx:for-item="group" wx:key="*this" class="group-head">{{group}}</view>
+            </view>
+            <view wx:for="{{prize.rows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="*this" class="prize-row">
+              <view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex" class="prize-cell">{{cell}}</view>
+            </view>
+            <view class="prize-total-row">
+              <view wx:for="{{prize.subtotals}}" wx:for-item="subtotal" wx:key="*this" class="prize-total">{{subtotal}}</view>
+            </view>
+          </view>
+          <view wx:else class="prize-block prize-{{prize.theme}}">
+            <view class="prize-title">{{prize.title}}</view>
+            <view class="stage-head-row">
+              <view wx:for="{{prize.headers}}" wx:for-item="header" wx:key="*this" class="stage-head">{{header}}</view>
+            </view>
+            <view wx:for="{{prize.rows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="*this" class="prize-row">
+              <view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex" class="prize-cell">{{cell}}</view>
+            </view>
+            <view class="prize-total-row">
+              <view wx:for="{{prize.subtotals}}" wx:for-item="subtotal" wx:key="*this" class="prize-total">{{subtotal}}</view>
+            </view>
+          </view>
+        </block>
+
+        <view class="sub-title">（四）比赛规则</view>
+        <view class="prose numbered">1、坦克汽车定向集结赛，是不以竞速为目的的趣味性汽车类户外活动，要求所有参加车辆在活动过程中，严格遵照道路交通法规行驶，所有参与人员及车上随行人员须自行承担在比赛过程中因违章或事故造成的经济损失与赔偿责任；</view>
+        <view class="prose numbered">2、所有报名参与的车辆必须按要求到指定地点参加开幕式，检录裁判员会在开幕式现场检录，并在车贴指定位置加盖检录章，不参加开幕式或未加盖检录章的车辆一律按照弃权处理；</view>
+        <view class="prose numbered">3、发车顺序：混合发车，ABCD组车辆在开幕式现场根据工作人员指挥整齐排列，按队列的先后顺序，根据发车裁判员在时间卡上填写的发车时间并按照发车信号灯倒计时提示准时发车；</view>
+        <view class="prose numbered">4、途经的每个县区均会设置1个PC点，参赛车辆可自由选择到达PC点的路线，但必须按照随行时间卡上标注的位置，按顺序到达各县区设定的PC点，并在时间卡上加盖PC点专用章，漏盖PC章或绕行PC点的车辆均视为无效参赛；</view>
+        <view class="prose numbered">5、PC点说明：强制通过点、盖章点。</view>
+        <view class="prose numbered">6、时间限定</view>
+        <view class="prose numbered">6.1发车间隔时长：1分钟，允许多辆车同时发车；</view>
+        <view class="prose numbered">6.2全程最小允许时间：20小时，在最小允许时间内到达终点的车辆视为无效成绩；</view>
+        <view class="prose numbered">6.3全程最大允许时间：30小时，以时间卡上标注的发车时间为准，在最大允许时间内到达终点的车辆视为有效成绩，超过最大允许时间的车辆一律视为无效成绩；</view>
+        <view class="prose numbered">6.4沿途各县区PC点开、关门时间：上午八点准时开门盖章，下午六点准时关门，关门后不再接受时间卡盖章事宜。</view>
+        <view class="prose numbered">6.5终点（嵖岈山）计时点关闭时间：以最后一辆车时间卡上标注的发车时间为准，加上最大允许时间为终点关门时间，关门后到达终点的车辆，不再计算成绩；</view>
+
+        <view class="sub-title">（五）计时</view>
+        <view class="prose numbered">1、本次活动采用目前国内最精准的高速摄像机计时系统，每秒拍摄帧率1000张，时间精确到千分之一秒；</view>
+        <view class="prose numbered">2、车辆通过冲刺点（方格旗标识），全程用时即被记录，需减速到达终点（STOP），停车上交随行的时间卡，然后直接驶离时间管控区；</view>
+        <view class="prose numbered">3、未交时间卡、或时间卡丢失的车辆一律视为无效参赛；</view>
+        <view class="prose numbered">4、比赛结束120分钟内，在《赛车视界》小程序手机端公布初步成绩，成绩公布30分钟后自动生效为最终成绩，成绩生效后不再接受任何关于本阶段成绩的投诉。</view>
+
+        <view class="sub-title">（六）成绩评定</view>
+        <view class="prose numbered">1、ABCD四个小组分别独立计算成绩、独立颁奖；</view>
+        <view class="prose numbered">2、SS1赛段成绩+SS2赛段成绩为总成绩；</view>
+        <view class="prose numbered">3、各小组车辆在最大允许时间内完成规划路程，则根据所有完成比赛车辆总成绩用时的算术平均值作为基准参照值，该平均值于比赛结束后由《赛车视界》系统产生，全程固化数据处理，严格遵循公平、公开、公正的原则，确保排名的可复核结果的可追溯性；</view>
+        <view class="prose numbered">4、单车全程成绩接近平均值为正值，超过平均值即为负值；正负值最接近平均值的为第一名，其次为第二名，依此类推。各小组根据正负值的排列顺序，分别录取10个名额颁奖。</view>
+        <view class="prose numbered">5、本次活动计时系统设定为百分秒格式评定全程用时，当小组内参赛车辆全程用时相同时，则调整为千分秒格式评定。</view>
+
+        <view class="stage-banner stage-banner-02"><view class="stage-brand">赛车视界<text>RACING VIEW</text></view><text class="stage-banner-title">中国·遂平·嵖岈山 汽车场地越野职业联赛</text><text class="stage-number">02</text></view>
+        <view class="sub-title">（一）赛事时间相关时间</view>
+        <view class="prose numbered">1、报到时间：2026年8月21日-22日</view>
+        <view class="prose numbered">2、开幕式发车仪式时间：8月23日上午</view>
+        <view class="prose numbered">3、比赛时间：8月25日、27日、29日</view>
+        <view class="sub-title">（二）相关地点</view>
+        <view class="prose numbered">1、报到地点：河南省遂平县</view>
+        <view class="prose numbered">2、开幕式发车仪式地点：</view>
+        <view class="prose numbered">4、巡游线路：遂平县（发车点）-嵖岈山（全程25公里）</view>
+        <view class="sub-title">（三）组别设置</view>
+        <view class="prose numbered">1、专业组</view><view class="prose numbered">2、公开组</view><view class="prose numbered">3、UTV组</view><view class="prose numbered">4、新秀组</view><view class="prose numbered">5、女子组</view>
+        <view class="prose note"><text class="note-label">特别备注：</text>在国内场地越野赛上获得过前五名的赛车手一律不允许报名参加（新秀组）的比赛。</view>
+        <view class="sub-title">（四）奖金设置</view>
+        <block wx:for="{{event2PrizeTables}}" wx:for-item="prize" wx:key="title">
+          <view class="prose numbered">{{prize.sectionLabel}}</view>
+          <view class="prize-block prize-{{prize.theme}}">
+            <view class="prize-title">{{prize.title}}</view>
+            <view class="stage-head-row"><view wx:for="{{prize.headers}}" wx:for-item="header" wx:key="*this" class="stage-head">{{header}}</view></view>
+            <view wx:for="{{prize.rows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="rowIndex" class="prize-row"><view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex" class="prize-cell">{{cell}}</view></view>
+            <view class="prize-total-row"><view wx:for="{{prize.subtotals}}" wx:for-item="subtotal" wx:key="*this" class="prize-total">{{subtotal}}</view></view>
+          </view>
+        </block>
+        <view class="sub-title">（五）比赛规则：详见后续公告</view>
+        <view class="stage-banner stage-banner-03"><view class="stage-brand">赛车视界<text>RACING VIEW</text></view><text class="stage-banner-title">中国·遂平·嵖岈山 汽车城市攀爬巡回赛</text><text class="stage-number">03</text></view>
+        <view class="sub-title">（一）相关时间</view>
+        <view class="prose numbered">1、报到时间：2026年8月21日-22日</view><view class="prose numbered">2、开幕式发车仪式时间：8月23日上午</view><view class="prose numbered">3、比赛时间：8月26日、28日、30日</view>
+        <view class="sub-title">（二）相关地点</view>
+        <view class="prose numbered">1、报到地点：河南省遂平县</view><view class="prose numbered">2、开幕式发车仪式地点：</view><view class="prose numbered">3、巡游线路：遂平县（发车点）-嵖岈山（全程25公里）</view><view class="prose numbered">7、比赛地点：嵖岈山有全香园区</view>
+        <view class="sub-title">（三）组别设置</view><view class="prose numbered">1、改装组</view><view class="prose numbered">2、量产组</view>
+        <view class="sub-title">（四）奖金设置</view>
+        <block wx:for="{{event3PrizeTables}}" wx:for-item="prize" wx:key="title">
+          <view class="prose numbered">{{prize.sectionLabel}}</view>
+          <view class="prize-block prize-{{prize.theme}}">
+            <view class="prize-title">{{prize.title}}</view>
+            <view class="stage-head-row"><view wx:for="{{prize.headers}}" wx:for-item="header" wx:key="*this" class="stage-head">{{header}}</view></view>
+            <view wx:for="{{prize.rows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="rowIndex" class="prize-row"><view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex" class="prize-cell">{{cell}}</view></view>
+            <view class="prize-total-row"><view wx:for="{{prize.subtotals}}" wx:for-item="subtotal" wx:key="*this" class="prize-total">{{subtotal}}</view></view>
+          </view>
+        </block>
+        <view class="sub-title">（五）比赛规则：详见后续公告。</view>
+        <view class="prose">相关规则的补充、修正和变化，都将通过本活动组委会、或仲裁委员会决策后，按时间和编制在《赛车视界》小程序公告栏依次发布公告。补充、修正和变化后的规则与原公告内容发生冲突或改变时，一律按照最新公告所述规则执行，要求所有参加者必须熟悉相关规则并严格遵守。活动组委会拥有关于本活动所有事宜的唯一解释权！</view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{event && event.id}}" class="detail-actions" aria-label="赛事互动">
+    <view class="detail-action" hover-class="detail-action-hover" bindtap="toggleLike">
+      <view class="detail-action-icon detail-like-icon {{liked ? 'active' : ''}}"></view>
+      <text class="detail-action-count">{{likeCount}}</text>
+    </view>
+    <view class="detail-action" hover-class="detail-action-hover" bindtap="openComments">
+      <view class="detail-action-icon detail-comment-icon"><view></view><view></view><view></view></view>
+      <text class="detail-action-count">{{commentCount}}</text>
+    </view>
+    <view class="share-action-wrap">
+      <view class="detail-action share-action-visual">
+        <view class="detail-action-icon detail-share-icon"></view>
+        <text class="detail-action-count">{{shareCount}}</text>
+      </view>
+      <button class="share-trigger" open-type="share" hover-class="detail-action-hover"></button>
+    </view>
+  </view>
+
+  <view wx:if="{{commentVisible}}" class="comment-mask" catchtap="closeComments">
+    <view class="comment-panel" catchtap="stopCommentTap">
+      <view class="comment-panel-title">评论 <text class="comment-close" bindtap="closeComments">×</text></view>
+      <scroll-view class="comment-list" scroll-y>
+        <view wx:if="{{!comments.length}}" class="comment-empty">暂无评论，来说两句吧</view>
+        <view wx:for="{{comments}}" wx:key="id" class="comment-item">
+          <view class="comment-user">{{item.nickname}}</view>
+          <view class="comment-content">{{item.content}}</view>
+        </view>
+      </scroll-view>
+      <view class="comment-input-row">
+        <input class="comment-input" value="{{commentText}}" maxlength="200" placeholder="说点什么..." confirm-type="send" bindinput="onCommentInput" bindconfirm="submitComment" />
+        <button class="comment-submit" bindtap="submitComment">发送</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{resultsSheetVisible}}" class="results-mask" catchtap="closeResults">
+    <view wx:if="{{!scoreViewVisible}}" class="results-sheet" catchtap="stopSheetTap">
+      <view class="results-sheet-header">成绩详情<view class="results-close" bindtap="closeResults">×</view></view>
+      <scroll-view class="score-group-list" scroll-y="true" show-scrollbar="false">
+        <view wx:if="{{scoreLoading}}" class="score-publish-state">正在加载已发布成绩…</view>
+        <view wx:elif="{{!scoreGroups.length}}" class="score-publish-state">
+          <view class="score-empty-title">成绩未发布</view>
+          <view class="score-empty-text">赛事成绩尚未发布</view>
+        </view>
+        <view wx:for="{{scoreGroups}}" wx:key="name" class="score-group">
+          <view class="score-group-heading">
+            <view class="score-group-title">{{item.name}}</view>
+            <view class="score-expand {{item.expanded ? 'expanded' : ''}}" data-index="{{index}}" bindtap="toggleScoreGroup"></view>
+          </view>
+          <view class="score-stage-grid">
+            <view wx:for="{{item.stages}}" wx:for-item="stage" wx:for-index="stageIndex" wx:key="*this" class="score-stage {{!item.expanded && stageIndex > 2 ? 'score-stage-hidden' : ''}}" data-group-index="{{index}}" data-stage-index="{{stageIndex}}" bindtap="openScore">{{stage}}</view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view wx:if="{{scoreViewVisible && selectedScore}}" class="score-result-sheet" catchtap="stopSheetTap">
+      <scroll-view class="score-result-scroll" scroll-y="true" show-scrollbar="false">
+        <view wx:if="{{selectedScore && selectedScore.rows && selectedScore.rows.length}}" class="score-team-list">
+          <view wx:for="{{selectedScore.rows}}" wx:key="id" class="score-team-card">
+            <view class="score-team-head"><view><text class="score-car-label">车号：</text><text class="score-car-number">{{item.carNumber}}</text></view><view class="score-rank score-rank-{{item.rank}}"><view wx:if="{{item.rank && item.rank <= 3}}" class="score-trophy score-trophy-{{item.rank}}"><view class="score-trophy-handle score-trophy-handle-left"></view><view class="score-trophy-handle score-trophy-handle-right"></view><view class="score-trophy-bowl"></view><view class="score-trophy-stem"></view><view class="score-trophy-base"></view></view><text class="score-rank-label">排名</text><strong>{{item.rank || '—'}}</strong></view></view>
+            <view wx:for="{{item.stageValues}}" wx:for-item="stageValue" wx:key="name" class="score-stage-record">
+              <view class="score-stage-record-title">{{stageValue.name}}</view>
+              <view class="score-stage-record-grid">
+                <view><text>发车时间</text><strong>{{stageValue.startTime || '—'}}</strong></view>
+                <view><text>收车时间</text><strong>{{stageValue.endTime || '—'}}</strong></view>
+                <view><text>罚时</text><strong>{{stageValue.penalty || '—'}}</strong></view>
+                <view><text>赛段用时</text><strong>{{stageValue.duration || '—'}}</strong></view>
+              </view>
+            </view>
+            <view class="score-published-total"><text>{{selectedScore.isTotal ? (selectedScore.rankingMode === 'total' ? '总成绩' : '最佳成绩') : '本赛段成绩'}}</text><strong>{{item.validScore || item.selectedDuration || '—'}}</strong></view>
+          </view>
+        </view>
+        <view wx:else class="score-empty">
+          <view class="score-empty-icon"></view>
+          <view class="score-empty-title">暂无已发布成绩</view>
+          <view class="score-empty-text">赛事管理员发布后可在这里查看</view>
+        </view>
+        <view class="score-result-note">只显示已发布的成绩记录，未发布成绩不会参与排名。</view>
+      </scroll-view>
+    </view>
+  </view>
+</view>
+

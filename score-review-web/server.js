@@ -51,12 +51,9 @@ function serve(res, urlPath) {
 function body(req) { return new Promise((resolve, reject) => { let value = ''; req.on('data', chunk => { value += chunk; if (value.length > 8 * 1024 * 1024) reject(new Error('请求过大')) }); req.on('end', () => { try { resolve(value ? JSON.parse(value) : {}) } catch { reject(new Error('请求格式无效')) } }); req.on('error', reject) }) }
 function key(eventId, stage) { return `${String(eventId || 'default').slice(0, 100)}::${String(stage || '').toUpperCase()}` }
 function publicEventView(event) {
-  const detailParts = [
-    String(event.detailText || '').trim(),
-    event.rulesText ? `竞赛规则\n${String(event.rulesText).trim()}` : '',
-    event.awardsText ? `奖项设置\n${String(event.awardsText).trim()}` : ''
-  ].filter(Boolean)
-  return { ...event, editorDetailText: String(event.detailText || ''), detailText: detailParts.join('\n\n') }
+  // Return each editable event-detail section as its own field so the mini
+  // program can render registration, rules and awards in their proper places.
+  return { ...event, editorDetailText: String(event.detailText || '') }
 }
 function cloudError(res, error) {
   const rawMessage = String(error && (error.errMsg || error.message) || error)
