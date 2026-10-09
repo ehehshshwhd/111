@@ -112,6 +112,16 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, events })
     } catch (error) { return cloudError(res, error) }
   }
+  if (url.pathname === '/api/public/results' && req.method === 'GET') {
+    try {
+      const eventId = String(url.searchParams.get('eventId') || '').trim()
+      if (!eventId) return send(res, 400, { ok: false, message: '缺少赛事 ID' })
+      const result = cloudStore.enabled
+        ? await cloudStore.getPublishedResults(eventId)
+        : (readData().publishedResults || {})[eventId] || { ok: true, eventId, publishedAt: null, rankingMode: 'best', groups: [], stageNames: [], rows: [] }
+      return send(res, 200, result)
+    } catch (error) { return cloudError(res, error) }
+  }
   if (url.pathname.startsWith('/api/')) {
     if (!validSession(req)) return send(res, 401, { ok: false, message: '请先登录网页后台' })
     if (url.pathname === '/api/session' && req.method === 'GET') return send(res, 200, { ok: true })
@@ -122,6 +132,14 @@ const server = http.createServer(async (req, res) => {
         const event = await cloudStore.saveEvent(input)
         return send(res, 200, { ok: true, event })
       } catch (error) { return send(res, 400, { ok: false, message: error.message || '赛事保存失败' }) }
+    }
+    if (url.pathname === '/api/published-results' && req.method === 'POST') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '发布成绩需要连接 CloudBase；当前服务未配置云端数据库。' })
+        const input = await body(req)
+        const result = await cloudStore.publishResults(input.eventId, input.visibleGroups, input.rankingMode)
+        return send(res, 200, { ok: true, ...result })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '成绩发布失败' }) }
     }
     if (url.pathname === '/api/event-covers' && req.method === 'POST') {
       try {

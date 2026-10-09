@@ -6,6 +6,12 @@ let database
 let cloudClient
 let collectionReady
 let eventsCollectionReady
+let publishedResultsCollectionReady
+
+function cleanGroupNames(values) {
+  if (!Array.isArray(values)) return []
+  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100)
+}
 
 function getDatabase() {
   if (!env) throw new Error('未配置 SCORE_REVIEW_CLOUDBASE_ENV')
@@ -34,6 +40,8 @@ function cleanEvent(input, id) {
     detailText: String(source.detailText || '').trim().slice(0, 10000),
     coverUrl: String(source.coverUrl || '').trim().slice(0, 2000),
     coverFileId: String(source.coverFileId || '').trim().slice(0, 500),
+    groups: cleanGroupNames(source.groups),
+    visibleGroups: cleanGroupNames(source.visibleGroups),
     published: source.published !== false,
     templateEventId: String(source.templateEventId || '').slice(0, 80),
     publishedAt: source.publishedAt || null,
@@ -122,6 +130,7 @@ function cleanRows(rows) {
   return rows.slice(0, 1000).map((row, index) => ({
     id: String(row && row.id || `web-${index}`).slice(0, 80),
     carNumber: String(row && (row.carNumber || row.car) || '').replace(/[^0-9a-z]/gi, '').toUpperCase().slice(0, 12),
+    group: String(row && (row.group || row.groupName || row.teamName) || '').trim().slice(0, 100),
     startTime: String(row && (row.startTime || row.start) || '').slice(0, 24),
     endTime: String(row && (row.endTime || row.finish) || '').slice(0, 24),
     penaltyInputs: Array.isArray(row && row.penaltyInputs) ? row.penaltyInputs.slice(0, 10).map((item, penaltyIndex) => ({
@@ -130,8 +139,82 @@ function cleanRows(rows) {
     })) : [],
     penaltyTotal: String(row && (row.penaltyTotal || row.penalty) || '').slice(0, 16),
     segmentDuration: String(row && (row.segmentDuration || row.duration) || '').slice(0, 24),
-    totalDuration: String(row && (row.totalDuration || row.duration) || '').slice(0, 24)
+    totalDuration: String(row && (row.totalDuration || row.duration) || '').slice(0, 24),
+    status: ['approved', 'returned', 'pending'].includes(String(row && row.status || '').toLowerCase())
+      ? String(row.status).toLowerCase()
+      : 'pending'
   })).filter(row => row.carNumber)
+}
+
+function parseDurationMs(value) {
+  const match = String(value || '').trim().match(/^(\d+):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/)
+  if (!match) return null
+  return Number(match[1]) * 3600000 + Number(match[2]) * 60000 + Number(match[3]) * 1000 + Number((match[4] || '').padEnd(3, '0'))
+}
+
+function parsePenaltyMs(value) {
+  const text = String(value || '').trim().toLowerCase()
+  if (!text || text === '0') return 0
+  if (/^\d+$/.test(text)) return Number(text) * 1000
+  const clock = text.match(/^(\d+):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/)
+  if (clock) return Number(clock[1]) * 3600000 + Number(clock[2]) * 60000 + Number(clock[3]) * 1000 + Number((clock[4] || '').padEnd(3, '0'))
+  let total = 0
+  let match
+  const unitPattern = /(\d+(?:\.\d+)?)\s*(h|小时|m|min|分钟|s|秒)/g
+  while ((match = unitPattern.exec(text))) {
+    const amount = Number(match[1])
+    total += match[2] === 'h' || match[2] === '小时' ? amount * 3600000
+      : match[2] === 'm' || match[2] === 'min' || match[2] === '分钟' ? amount * 60000
+        : amount * 1000
+  }
+  return Math.round(total)
+}
+
+function formatDurationMs(value) {
+  if (!Number.isFinite(value) || value < 0) return ''
+  const hours = Math.floor(value / 3600000)
+  const minutes = Math.floor(value % 3600000 / 60000)
+  const seconds = Math.floor(value % 60000 / 1000)
+  const millis = Math.round(value % 1000)
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`
+}
+
+function resultTimes(row) {
+  const start = parseDurationMs(row.startTime)
+  const end = parseDurationMs(row.endTime)
+  const penalty = parsePenaltyMs(row.penaltyTotal)
+  if (start !== null && end !== null) {
+    let elapsed = end - start
+    if (elapsed < 0) elapsed += 24 * 3600000
+    return { elapsed, effective: elapsed + penalty }
+  }
+
+  const segment = parseDurationMs(row.segmentDuration)
+  if (segment !== null) return { elapsed: segment, effective: segment + penalty }
+
+  // Older imports sometimes contain only totalDuration. Treat it as the
+  // penalty-inclusive value, while retaining a separate displayed stage time.
+  const total = parseDurationMs(row.totalDuration)
+  if (total !== null) return { elapsed: Math.max(0, total - penalty), effective: total }
+  return null
+}
+
+async function ensurePublishedResultsCollection(db) {
+  if (!publishedResultsCollectionReady) {
+    publishedResultsCollectionReady = (async () => {
+      try {
+        await db.collection('published_results').limit(1).get()
+      } catch (error) {
+        const message = String(error && (error.errMsg || error.message) || error)
+        if (!message.includes('-502005')) throw error
+        try { await db.createCollection('published_results') } catch { await db.collection('published_results').limit(1).get() }
+      }
+    })().catch(error => {
+      publishedResultsCollectionReady = null
+      throw error
+    })
+  }
+  return publishedResultsCollectionReady
 }
 
 async function ensureCollection(db) {
@@ -192,6 +275,136 @@ async function put(eventId, stage, inputRows) {
   return { count: rows.length }
 }
 
+function cleanPublishedResults(record, eventId = '') {
+  const source = record || {}
+  return {
+    ok: true,
+    eventId: String(source.eventId || eventId || ''),
+    publishedAt: source.publishedAt || null,
+    rankingMode: source.rankingMode === 'total' ? 'total' : 'best',
+    groups: cleanGroupNames(source.groups),
+    stageNames: Array.isArray(source.stageNames) ? source.stageNames.filter(stage => STAGES.has(stage)) : [],
+    rows: Array.isArray(source.rows) ? source.rows : []
+  }
+}
+
+async function getPublishedResults(eventId) {
+  const id = String(eventId || '').trim().slice(0, 100)
+  if (!id) throw new Error('赛事无效')
+  const db = getDatabase()
+  await ensurePublishedResultsCollection(db)
+  const result = await db.collection('published_results').where({ eventId: id }).limit(1).get()
+  return cleanPublishedResults(result.data && result.data[0], id)
+}
+
+async function publishResults(eventId, visibleGroups, rankingMode) {
+  const id = String(eventId || '').trim().slice(0, 100)
+  if (!id) throw new Error('请先选择赛事')
+  const db = getDatabase()
+  await ensureEventsCollection(db)
+  await ensureCollection(db)
+  await ensurePublishedResultsCollection(db)
+
+  const eventResult = await db.collection('events').where({ id }).limit(1).get()
+  const storedEvent = eventResult.data && eventResult.data[0]
+  if (!storedEvent) throw new Error('没有找到该赛事，请先保存并发布赛事信息')
+  const event = cleanEvent(storedEvent, storedEvent.id || storedEvent._id)
+  const requestedGroups = cleanGroupNames(Array.isArray(visibleGroups) ? visibleGroups : event.visibleGroups)
+  // Older events predate group metadata. Let the first explicit publication
+  // configure their group list instead of forcing the admin to recreate them.
+  // The web checklist can include groups found on imported/legacy score rows.
+  // Persist explicitly selected names too, so they are not silently discarded
+  // when an older event has incomplete group metadata.
+  const availableGroups = cleanGroupNames([...cleanGroupNames(event.groups), ...requestedGroups])
+  const groups = requestedGroups.filter(group => availableGroups.includes(group))
+  if (!Array.isArray(visibleGroups) && !groups.length) throw new Error('请先配置本场赛事的可展示组别')
+  const mode = rankingMode === 'total' ? 'total' : 'best'
+  const selectedGroups = new Set(groups)
+  const stageEntries = await Promise.all(Array.from(STAGES, async stage => [stage, await get(id, stage)]))
+  const byCar = new Map()
+  const stagesWithData = new Set()
+  let approvedWithoutGroup = 0
+
+  for (const [stage, record] of stageEntries) {
+    for (const row of record.rows) {
+      if (row.status !== 'approved') continue
+      if (!selectedGroups.size) continue
+      if (!row.group) { approvedWithoutGroup += 1; continue }
+      if (!selectedGroups.has(row.group)) continue
+      const times = resultTimes(row)
+      if (!times || times.effective <= 0) continue
+      const carNumber = row.carNumber
+      if (!byCar.has(carNumber)) byCar.set(carNumber, { carNumber, group: row.group, stageTimes: {} })
+      const competitor = byCar.get(carNumber)
+      // A competitor number is unique within an event. If a row was accidentally
+      // assigned to two groups, keep its first approved assignment consistently.
+      if (competitor.group !== row.group) continue
+      const previous = competitor.stageTimes[stage]
+      if (!previous || times.effective < previous._effectiveMs) {
+        competitor.stageTimes[stage] = {
+          startTime: row.startTime,
+          endTime: row.endTime,
+          penalty: row.penaltyTotal,
+          duration: formatDurationMs(times.elapsed),
+          _durationMs: times.elapsed,
+          _effectiveMs: times.effective
+        }
+      }
+      stagesWithData.add(stage)
+    }
+  }
+  const stageNames = [...stagesWithData].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)))
+  const grouped = new Map(groups.map(group => [group, []]))
+  for (const competitor of byCar.values()) {
+    const entries = Object.entries(competitor.stageTimes)
+      .map(([stage, item]) => ({ stage, item, ms: item._durationMs }))
+      .sort((a, b) => Number(a.stage.slice(2)) - Number(b.stage.slice(2)))
+    if (!entries.length) continue
+    const totalMs = entries.reduce((sum, entry) => sum + entry.item._effectiveMs, 0)
+    const bestMs = Math.min(...entries.map(entry => entry.item._effectiveMs))
+    const validMs = mode === 'total' ? totalMs : bestMs
+    for (const item of Object.values(competitor.stageTimes)) {
+      delete item._durationMs
+      delete item._effectiveMs
+    }
+    grouped.get(competitor.group).push({
+      id: `${id}-${competitor.carNumber}`,
+      carNumber: competitor.carNumber,
+      group: competitor.group,
+      stageTimes: competitor.stageTimes,
+      bestScore: formatDurationMs(bestMs),
+      totalScore: formatDurationMs(totalMs),
+      validScore: formatDurationMs(validMs),
+      _validMs: validMs
+    })
+  }
+
+  const rows = []
+  for (const group of groups) {
+    const ordered = (grouped.get(group) || []).sort((a, b) => a._validMs - b._validMs || a.carNumber.localeCompare(b.carNumber, undefined, { numeric: true }))
+    let previousMs = null
+    let previousRank = 0
+    ordered.forEach((row, index) => {
+      if (row._validMs !== previousMs) previousRank = index + 1
+      previousMs = row._validMs
+      const { _validMs, ...publicRow } = row
+      rows.push({ ...publicRow, rank: previousRank })
+    })
+  }
+
+  const publishedGroups = groups.filter(group => grouped.get(group) && grouped.get(group).length)
+  const publishedAt = new Date().toISOString()
+  const snapshot = { eventId: id, publishedAt, rankingMode: mode, groups: publishedGroups, stageNames, rows }
+  if (JSON.stringify(cleanGroupNames(event.groups)) !== JSON.stringify(availableGroups)
+    || JSON.stringify(cleanGroupNames(event.visibleGroups)) !== JSON.stringify(publishedGroups)) {
+    await db.collection('events').doc(storedEvent._id).update({ groups: availableGroups, visibleGroups: publishedGroups, updatedAt: new Date() })
+  }
+  const existing = await db.collection('published_results').where({ eventId: id }).limit(1).get()
+  if (existing.data && existing.data.length) await db.collection('published_results').doc(existing.data[0]._id).update(snapshot)
+  else await db.collection('published_results').add(snapshot)
+  return { ...cleanPublishedResults(snapshot, id), rowCount: rows.length, unassignedRowCount: approvedWithoutGroup }
+}
+
 module.exports = {
   enabled: Boolean(env),
   env,
@@ -202,6 +415,8 @@ module.exports = {
   check,
   get,
   put,
+  getPublishedResults,
+  publishResults,
   listEvents,
   saveEvent,
   uploadEventCover
