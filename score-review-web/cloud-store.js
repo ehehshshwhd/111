@@ -63,6 +63,15 @@ function getDatabase() {
   return database
 }
 
+function isMissingCollectionError(error) {
+  const code = String(error && (error.code || error.errCode) || '').toUpperCase()
+  const message = String(error && (error.errMsg || error.message) || error)
+  return code.includes('DATABASE_COLLECTION_NOT_EXIST')
+    || code === '-502005'
+    || message.includes('-502005')
+    || /collection.*(not exist|doesn't exist|不存在)/i.test(message)
+}
+
 function cleanEvent(input, id) {
   const source = input || {}
   const stageNames = cleanStageNames(source.stageNames)
@@ -110,8 +119,7 @@ async function ensureEventsCollection(db) {
       try {
         await db.collection('events').limit(1).get()
       } catch (error) {
-        const message = String(error && (error.errMsg || error.message) || error)
-        if (!message.includes('-502005')) throw error
+        if (!isMissingCollectionError(error)) throw error
         try { await db.createCollection('events') } catch { await db.collection('events').limit(1).get() }
       }
     })().catch(error => {
@@ -221,8 +229,7 @@ async function ensurePermissionsCollections(db) {
       try {
         await db.collection(name).limit(1).get()
       } catch (error) {
-        const message = String(error && (error.errMsg || error.message) || error)
-        if (!message.includes('-502005') && !/collection.*(not exist|doesn't exist|不存在)/i.test(message)) throw error
+        if (!isMissingCollectionError(error)) throw error
         try { await db.createCollection(name) } catch { await db.collection(name).limit(1).get() }
       }
     })).catch(error => {
@@ -395,8 +402,7 @@ async function ensurePublishedResultsCollection(db) {
       try {
         await db.collection('published_results').limit(1).get()
       } catch (error) {
-        const message = String(error && (error.errMsg || error.message) || error)
-        if (!message.includes('-502005')) throw error
+        if (!isMissingCollectionError(error)) throw error
         try { await db.createCollection('published_results') } catch { await db.collection('published_results').limit(1).get() }
       }
     })().catch(error => {
@@ -413,8 +419,7 @@ async function ensureCollection(db) {
       try {
         await db.collection('work_records').limit(1).get()
       } catch (error) {
-        const message = String(error && (error.errMsg || error.message) || error)
-        if (!message.includes('-502005')) throw error
+        if (!isMissingCollectionError(error)) throw error
         try { await db.createCollection('work_records') } catch { await db.collection('work_records').limit(1).get() }
       }
     })().catch(error => {
@@ -445,7 +450,8 @@ async function get(eventId, stage) {
 
 async function check() {
   const db = getDatabase()
-  await db.collection('work_records').limit(1).get()
+  await ensureCollection(db)
+  await ensureEventsCollection(db)
   return true
 }
 
