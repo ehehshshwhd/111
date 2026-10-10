@@ -337,6 +337,9 @@ function cleanRows(rows) {
     penaltyTotal: String(row && (row.penaltyTotal || row.penalty) || '').slice(0, 16),
     segmentDuration: String(row && (row.segmentDuration || row.duration) || '').slice(0, 24),
     totalDuration: String(row && (row.totalDuration || row.duration) || '').slice(0, 24),
+    durationManual: row && row.durationManual === true,
+    uploader: String(row && row.uploader || '').slice(0, 80),
+    uploadedAt: String(row && row.uploadedAt || '').slice(0, 80),
     status: ['approved', 'returned', 'pending'].includes(String(row && row.status || '').toLowerCase())
       ? String(row.status).toLowerCase()
       : 'pending'
@@ -377,6 +380,13 @@ function formatDurationMs(value) {
 }
 
 function resultTimes(row) {
+  if (row.durationManual === true) {
+    const manualSegment = parseDurationMs(row.segmentDuration)
+    if (manualSegment !== null) {
+      const manualPenalty = parsePenaltyMs(row.penaltyTotal)
+      return { elapsed: manualSegment, effective: manualSegment + manualPenalty }
+    }
+  }
   const start = parseDurationMs(row.startTime)
   const end = parseDurationMs(row.endTime)
   const penalty = parsePenaltyMs(row.penaltyTotal)
