@@ -51,6 +51,22 @@ function cleanSignupOptions(value) {
   }).filter(item => item.name)
 }
 
+function cleanSectionTitles(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  const defaults = {
+    signup: '赛事报名',
+    results: '查看成绩详情',
+    info: '赛事信息',
+    detail: '赛事详情',
+    rules: '竞赛规则',
+    awards: '奖项设置'
+  }
+  return Object.fromEntries(Object.entries(defaults).map(([key, fallback]) => [
+    key,
+    String(source[key] || fallback).trim().slice(0, 80) || fallback
+  ]))
+}
+
 function getDatabase() {
   if (!env) throw new Error('未配置 SCORE_REVIEW_CLOUDBASE_ENV')
   if (!database) {
@@ -95,6 +111,7 @@ function cleanEvent(input, id) {
     contactWechat: String(source.contactWechat || '').trim().slice(0, 80),
     registrationNote: String(source.registrationNote || '').trim().slice(0, 5000),
     signupOptions: cleanSignupOptions(source.signupOptions),
+    sectionTitles: cleanSectionTitles(source.sectionTitles),
     coverUrl: String(source.coverUrl || '').trim().slice(0, 2000),
     coverFileId: String(source.coverFileId || '').trim().slice(0, 500),
     groups: cleanGroupNames(source.groups),

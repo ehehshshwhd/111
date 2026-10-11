@@ -12,14 +12,14 @@
       </view>
 
       <view wx:if="{{event && event.signup && event.signup.length}}" class="section signup-section">
-        <view class="section-title">赛事报名</view>
+        <view class="section-title">{{event.sectionTitles.signup || '赛事报名'}}</view>
         <view class="signup-list">
           <view class="signup-row" wx:for="{{event.signup}}" wx:key="*this"><text>{{item}}</text></view>
         </view>
       </view>
 
       <view wx:if="{{event && event.isDynamic && (event.registrationNote || (event.signupOptions && event.signupOptions.length))}}" class="section signup-section generic-signup-section">
-        <view class="section-title">赛事报名</view>
+        <view class="section-title">{{event.sectionTitles.signup || '赛事报名'}}</view>
         <view wx:if="{{event.registrationNote}}" class="prose generic-detail-copy">{{event.registrationNote}}</view>
         <view wx:if="{{event.signupOptions && event.signupOptions.length}}" class="signup-list">
           <view class="signup-row generic-signup-row" wx:for="{{event.signupOptions}}" wx:key="index">
@@ -29,10 +29,10 @@
         </view>
       </view>
 
-      <view class="action-row detail-entry-actions"><button class="primary-btn" bindtap="openResults">查看成绩详情</button><button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button></view>
+      <view class="action-row detail-entry-actions"><button class="primary-btn" bindtap="openResults">{{event.sectionTitles.results || '查看成绩详情'}}</button><button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button></view>
 
       <view wx:if="{{event.isGeneric}}" class="section info-section generic-event-info">
-        <view class="section-title">赛事信息</view>
+        <view class="section-title">{{event.sectionTitles.info || '赛事信息'}}</view>
         <view wx:if="{{event.dateFull || event.date}}" class="info-line"><text class="info-label">比赛时间：</text><text>{{event.dateFull || event.date}}</text></view>
         <view wx:if="{{event.registrationDeadline}}" class="info-line"><text class="info-label">报名截止：</text><text>{{event.registrationDeadline}}</text></view>
         <view wx:if="{{event.location}}" class="info-line"><text class="info-label">集合地址：</text><text>{{event.location}}</text></view>
@@ -40,10 +40,9 @@
         <view wx:if="{{event.contactPhone}}" class="info-line"><text class="info-label">联系电话：</text><text>{{event.contactPhone}}</text></view>
         <view wx:if="{{event.contactWechat}}" class="info-line"><text class="info-label">微信号：</text><text>{{event.contactWechat}}</text></view>
         <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
-        <view wx:if="{{event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
       </view>
       <view wx:else class="section info-section">
-        <view class="section-title">赛事信息</view>
+        <view class="section-title">{{event.sectionTitles.info || '赛事信息'}}</view>
         <view class="info-line"><text class="info-label">比赛时间：</text><text>{{event.dateFull}}</text></view>
         <view class="info-line"><text class="info-label">报名截止：</text><text>2026-08-22</text></view>
         <view class="info-line"><text class="info-label">集合地址：</text><text>{{event.location}}</text></view>
@@ -52,12 +51,17 @@
         <view class="info-line"><text class="info-label">微信号：</text><text>13269191919</text></view>
       </view>
 
+      <view wx:if="{{event && event.isDynamic && event.detailText}}" class="section generic-copy-section">
+        <view class="section-title">{{event.sectionTitles.detail || '赛事详情'}}</view>
+        <view class="prose generic-detail-copy">{{event.detailText}}</view>
+      </view>
+
       <view wx:if="{{event && event.isDynamic && event.rulesText}}" class="section generic-copy-section">
-        <view class="section-title">竞赛规则</view>
+        <view class="section-title">{{event.sectionTitles.rules || '竞赛规则'}}</view>
         <view class="prose generic-detail-copy">{{event.rulesText}}</view>
       </view>
       <view wx:if="{{event && event.isDynamic && event.awardsText}}" class="section generic-copy-section">
-        <view class="section-title">奖项设置</view>
+        <view class="section-title">{{event.sectionTitles.awards || '奖项设置'}}</view>
         <view class="prose generic-detail-copy">{{event.awardsText}}</view>
       </view>
 
@@ -69,7 +73,7 @@
 
       <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic}}" class="separator"></view>
       <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic && detailReady}}" class="race-detail section">
-        <view class="section-title no-border">赛事详情</view>
+        <view class="section-title no-border">{{event.sectionTitles.detail || '赛事详情'}}</view>
         <image class="detail-poster" src="/assets/events/event2-poster-crop.jpg" mode="widthFix" lazy-load="true" />
         <view class="prose lead"><text class="lead-label">前言：</text><text>嵖岈山为国家5A级旅游景区，坐落于河南省驻马店市遂平县城西25公里。本次活动地点定于嵖岈山有全香园区举办，以“中国·遂平嵖岈山首届坦克汽车定向集结赛”“中国·遂平嵖岈山汽车场地越野职业联赛”“中国·遂平嵖岈山汽车城市攀爬巡回赛”三大赛事为核心，以“三大赛事”重灵魂共鸣，依托天中文化载体，集多IP专业汽车赛事、文旅休闲与地方特色于一体的体育文旅融合标杆项目，唤醒这片历经7000万年自然风化雕凿而成的中原盆景，聚力打造国内知名汽车运动目的地，为推进驻马店文旅新业态的高质量发展奠定基础！</text></view>
         <view class="prose"><text>活动总称：2026中国·嵖岈山首届汽车越野嘉年华</text></view>

@@ -17,13 +17,30 @@ function eventDate(event) {
   return start || end
 }
 
+function eventSectionTitles(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  const defaults = {
+    signup: '赛事报名',
+    results: '查看成绩详情',
+    info: '赛事信息',
+    detail: '赛事详情',
+    rules: '竞赛规则',
+    awards: '奖项设置'
+  }
+  return Object.keys(defaults).reduce((result, key) => {
+    const text = String(source[key] || '').trim()
+    result[key] = text || defaults[key]
+    return result
+  }, {})
+}
+
 Page({
   data: {
     id: 'suiping',
     // Keep the first render fully defined. WeChat's view layer can fail its
     // initial patch when a large WXML tree reads properties from null.
     event: {
-      id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: []
+      id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: [], sectionTitles: eventSectionTitles()
     },
     prizeTables: [], event2PrizeTables: [], event3PrizeTables: [],
     liked: false, likeCount: 0, commentCount: 0, shareCount: 0,
@@ -88,6 +105,7 @@ Page({
         location: String(record.location || base.location || ''),
         status: String(record.status || base.status || ''),
         notice: String(record.notice || base.notice || ''),
+        sectionTitles: eventSectionTitles(record.sectionTitles || base.sectionTitles),
         detailText: String(record.detailText || ''),
         rulesText: String(record.rulesText || ''),
         awardsText: String(record.awardsText || ''),
@@ -406,6 +424,7 @@ Page({
         notice: '该赛事有1条公告(点击查看)',
         status: '已完赛',
         location: '河南省-驻马店市-遂平县 （报到地点待定）',
+        sectionTitles: eventSectionTitles(),
         signup: [
           '集合赛公开A组  ¥ 1/辆（已报0辆）',
           '集合赛公开B组  ¥ 1/辆（已报0辆）',
@@ -432,6 +451,7 @@ Page({
       status: '',
       location: '',
       signup: [],
+      sectionTitles: eventSectionTitles(),
       detailText: '',
       rulesText: '',
       awardsText: '',
