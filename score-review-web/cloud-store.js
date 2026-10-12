@@ -81,6 +81,7 @@ function cleanContentBlocks(value) {
     } else if (type === 'image') {
       block.url = String(raw.url || '').trim().slice(0, 2000)
       block.miniUrl = String(raw.miniUrl || '').trim().slice(0, 2000)
+      block.fileId = String(raw.fileId || '').trim().slice(0, 500)
     } else if (type === 'banner') {
       block.theme = ['02', '03'].includes(String(raw.theme)) ? String(raw.theme) : '02'
       block.text = String(raw.text || '').slice(0, 1000)
@@ -193,12 +194,24 @@ async function listEvents(options = {}) {
     .filter(event => event.id && (!options.publishedOnly || event.published))
     .sort((a, b) => new Date(b.publishedAt || b.createdAt || 0).getTime() - new Date(a.publishedAt || a.createdAt || 0).getTime()
       || new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
-  const fileIds = [...new Set(events.map(event => event.coverFileId).filter(Boolean))]
+  const fileIds = [...new Set(events.flatMap(event => [event.coverFileId, ...event.contentBlocks.map(block => block.type === 'image' ? block.fileId : '')]).filter(Boolean))]
   if (fileIds.length) {
-    const urls = await cloudClient.getTempFileURL({ fileList: fileIds.map(fileID => ({ fileID, maxAge: 3600 })) })
-    const urlById = new Map((urls.fileList || []).map(item => [item.fileID, item.tempFileURL]))
+    const urlById = new Map()
+    const batchSize = 50
+    const concurrency = 5
+    for (let offset = 0; offset < fileIds.length; offset += batchSize * concurrency) {
+      const batches = Array.from({ length: concurrency }, (_, index) => fileIds.slice(offset + index * batchSize, offset + (index + 1) * batchSize)).filter(batch => batch.length)
+      const results = await Promise.all(batches.map(batch => cloudClient.getTempFileURL({ fileList: batch.map(fileID => ({ fileID, maxAge: 3600 })) })))
+      results.flatMap(result => result.fileList || []).forEach(item => {
+        if (item.tempFileURL) urlById.set(item.fileID, item.tempFileURL)
+      })
+    }
     events.forEach(event => {
       if (event.coverFileId && urlById.get(event.coverFileId)) event.coverUrl = urlById.get(event.coverFileId)
+      event.contentBlocks.forEach(block => {
+        const refreshedUrl = block.type === 'image' && block.fileId && urlById.get(block.fileId)
+        if (refreshedUrl) { block.url = refreshedUrl; block.miniUrl = refreshedUrl }
+      })
     })
   }
   return events
@@ -240,6 +253,19 @@ async function uploadEventCover({ fileName, mimeType, data }) {
   const uploaded = await cloudClient.uploadFile({ cloudPath, fileContent: file })
   const urls = await cloudClient.getTempFileURL({ fileList: [{ fileID: uploaded.fileID, maxAge: 3600 }] })
   return { coverFileId: uploaded.fileID, coverUrl: urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || '' }
+}
+
+async function uploadEventAsset({ fileName, mimeType, data }) {
+  if (!/^image\/(jpeg|png|webp)$/.test(String(mimeType || ''))) throw new Error('图片只支持 JPG、PNG 或 WebP')
+  const base64 = String(data || '').replace(/^data:image\/(?:jpeg|png|webp);base64,/i, '')
+  const file = Buffer.from(base64, 'base64')
+  if (!file.length || file.length > 5 * 1024 * 1024) throw new Error('图片大小需在 5MB 以内')
+  getDatabase()
+  const safeName = String(fileName || 'event-image').replace(/[^a-z0-9._-]/gi, '_').slice(-80)
+  const cloudPath = 'events/content/' + Date.now() + '-' + require('node:crypto').randomBytes(4).toString('hex') + '-' + safeName
+  const uploaded = await cloudClient.uploadFile({ cloudPath, fileContent: file })
+  const urls = await cloudClient.getTempFileURL({ fileList: [{ fileID: uploaded.fileID, maxAge: 3600 }] })
+  return { fileId: uploaded.fileID, url: urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || '' }
 }
 
 function normalizePermissionPhone(value) {
@@ -716,6 +742,7 @@ module.exports = {
   listEvents,
   saveEvent,
   uploadEventCover,
+  uploadEventAsset,
   listPermissions,
   upsertPermission,
   updatePermission,

@@ -153,6 +153,13 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true, ...result })
       } catch (error) { return send(res, 400, { ok: false, message: error.message || '成绩发布失败' }) }
     }
+    if (url.pathname === '/api/event-assets' && req.method === 'POST') {
+      try {
+        if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '上传赛事图片需要连接 CloudBase 云存储' })
+        const result = await cloudStore.uploadEventAsset(await body(req))
+        return send(res, 200, { ok: true, ...result })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '赛事图片上传失败' }) }
+    }
     if (url.pathname === '/api/event-covers' && req.method === 'POST') {
       try {
         if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '上传封面需要连接 CloudBase 云存储' })

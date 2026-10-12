@@ -49,23 +49,11 @@
         <view class="info-line"><text class="info-label">微信号：</text><text>13269191919</text></view>
       </view>
 
-      <view wx:if="{{event && event.isDynamic && (event.coverUrl || event.detailText)}}" class="section generic-copy-section">
+      <view wx:if="{{event && event.isDynamic && (event.coverUrl || event.detailText || (event.contentBlocks && event.contentBlocks.length))}}" class="section generic-copy-section">
         <view class="section-title">{{event.sectionTitles.detail || '赛事详情'}}</view>
         <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
         <view wx:if="{{event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
-      </view>
-
-      <view wx:if="{{event && event.isDynamic && event.rulesText}}" class="section generic-copy-section">
-        <view class="section-title">{{event.sectionTitles.rules || '竞赛规则'}}</view>
-        <view class="prose generic-detail-copy">{{event.rulesText}}</view>
-      </view>
-      <view wx:if="{{event && event.isDynamic && event.awardsText}}" class="section generic-copy-section">
-        <view class="section-title">{{event.sectionTitles.awards || '奖项设置'}}</view>
-        <view class="prose generic-detail-copy">{{event.awardsText}}</view>
-      </view>
-
-      <view wx:if="{{event && event.isDynamic && event.contentBlocks && event.contentBlocks.length}}" class="section generic-copy-section generic-content-blocks">
-        <block wx:for="{{event.contentBlocks}}" wx:for-item="contentBlock" wx:key="key">
+        <block wx:if="{{event.contentBlocks && event.contentBlocks.length}}" wx:for="{{event.contentBlocks}}" wx:for-item="contentBlock" wx:key="key">
           <view wx:if="{{contentBlock.type === 'heading'}}" class="sub-title content-block-heading">{{contentBlock.text}}</view>
           <view wx:elif="{{contentBlock.type === 'paragraph' || contentBlock.type === 'text'}}" class="prose generic-detail-copy">{{contentBlock.text}}</view>
           <view wx:elif="{{contentBlock.type === 'note'}}" class="prose note generic-detail-copy">{{contentBlock.text}}</view>
@@ -85,6 +73,15 @@
             </view>
           </view>
         </block>
+      </view>
+
+      <view wx:if="{{event && event.isDynamic && event.rulesText}}" class="section generic-copy-section">
+        <view class="section-title">{{event.sectionTitles.rules || '竞赛规则'}}</view>
+        <view class="prose generic-detail-copy">{{event.rulesText}}</view>
+      </view>
+      <view wx:if="{{event && event.isDynamic && event.awardsText}}" class="section generic-copy-section">
+        <view class="section-title">{{event.sectionTitles.awards || '奖项设置'}}</view>
+        <view class="prose generic-detail-copy">{{event.awardsText}}</view>
       </view>
 
       <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic}}" class="separator"></view>
