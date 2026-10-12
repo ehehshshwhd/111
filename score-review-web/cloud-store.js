@@ -67,6 +67,40 @@ function cleanSectionTitles(value) {
   ]))
 }
 
+function cleanContentBlocks(value) {
+  if (!Array.isArray(value)) return []
+  const supported = new Set(['heading', 'paragraph', 'text', 'note', 'image', 'banner', 'divider', 'list', 'table'])
+  const cleanCell = cell => String(cell == null ? '' : cell).slice(0, 1000)
+  return value.slice(0, 100).reduce((blocks, raw) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return blocks
+    const type = String(raw.type || '').trim().toLowerCase()
+    if (!supported.has(type)) return blocks
+    const block = { type }
+    if (type === 'heading' || type === 'paragraph' || type === 'text' || type === 'note') {
+      block.text = String(raw.text == null ? raw.content || '' : raw.text).slice(0, 10000)
+    } else if (type === 'image') {
+      block.url = String(raw.url || '').trim().slice(0, 2000)
+      block.miniUrl = String(raw.miniUrl || '').trim().slice(0, 2000)
+    } else if (type === 'banner') {
+      block.theme = ['02', '03'].includes(String(raw.theme)) ? String(raw.theme) : '02'
+      block.text = String(raw.text || '').slice(0, 1000)
+      block.number = String(raw.number || '').slice(0, 4)
+    } else if (type === 'list') {
+      block.items = Array.isArray(raw.items)
+        ? raw.items.slice(0, 200).map(cleanCell).filter(Boolean)
+        : String(raw.text || '').split(/\r?\n/).map(item => item.trim().slice(0, 1000)).filter(Boolean).slice(0, 200)
+    } else if (type === 'table') {
+      block.title = String(raw.title || '').slice(0, 300)
+      block.headers = Array.isArray(raw.headers) ? raw.headers.slice(0, 30).map(cleanCell) : []
+      block.rows = Array.isArray(raw.rows)
+        ? raw.rows.slice(0, 200).filter(Array.isArray).map(row => row.slice(0, 30).map(cleanCell))
+        : []
+    }
+    blocks.push(block)
+    return blocks
+  }, [])
+}
+
 function getDatabase() {
   if (!env) throw new Error('未配置 SCORE_REVIEW_CLOUDBASE_ENV')
   if (!database) {
@@ -105,6 +139,10 @@ function cleanEvent(input, id) {
     detailText: String(source.detailText || '').trim().slice(0, 10000),
     rulesText: String(source.rulesText || '').trim().slice(0, 10000),
     awardsText: String(source.awardsText || '').trim().slice(0, 10000),
+    contentBlocks: cleanContentBlocks(source.contentBlocks),
+    // Preserve whether blocks were configured so legacy records can seed the
+    // template without overriding an intentionally empty page.
+    contentBlocksConfigured: source.contentBlocksConfigured === true || Array.isArray(source.contentBlocks),
     registrationDeadline: String(source.registrationDeadline || '').trim().slice(0, 30),
     contactName: String(source.contactName || '').trim().slice(0, 80),
     contactPhone: String(source.contactPhone || '').trim().slice(0, 40),

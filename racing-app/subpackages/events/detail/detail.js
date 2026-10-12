@@ -34,13 +34,71 @@ function eventSectionTitles(value) {
   }, {})
 }
 
+function normalizeContentBlocks(value) {
+  if (!Array.isArray(value)) return []
+  const supportedTypes = new Set(['heading', 'paragraph', 'text', 'note', 'image', 'banner', 'divider', 'list', 'table'])
+  return value.reduce((blocks, block, index) => {
+    if (!block || typeof block !== 'object' || Array.isArray(block)) return blocks
+    const type = String(block.type || '').trim().toLowerCase()
+    if (!supportedTypes.has(type)) return blocks
+
+    const textValue = block.text == null ? (block.content == null ? '' : block.content) : block.text
+    const text = typeof textValue === 'string' ? textValue : String(textValue)
+    const toCellText = cell => {
+      if (cell == null) return ''
+      if (typeof cell === 'string' || typeof cell === 'number') return String(cell)
+      if (typeof cell === 'object') return String(cell.text || cell.label || cell.value || '')
+      return ''
+    }
+    const items = Array.isArray(block.items)
+      ? block.items.map(toCellText).filter(item => item !== '')
+      : (type === 'list' ? text.split(/\r?\n/).map(item => item.trim()).filter(Boolean) : [])
+    const headers = Array.isArray(block.headers) ? block.headers.map(toCellText) : []
+    const rows = Array.isArray(block.rows)
+      ? block.rows.map(row => Array.isArray(row) ? row.map(toCellText) : []).filter(row => row.length)
+      : []
+    const url = String(block.miniUrl || block.url || '')
+
+    const normalized = {
+      key: String(block.id || index),
+      type,
+      text,
+      items,
+      headers,
+      rows,
+      title: String(block.title || ''),
+      src: url
+    }
+    if (type === 'banner') {
+      normalized.theme = ['02', '03'].includes(String(block.theme)) ? String(block.theme) : '02'
+      normalized.number = String(block.number || '').slice(0, 4)
+    }
+    blocks.push(normalized)
+    return blocks
+  }, [])
+}
+
+function normalizeSignupOptions(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(item => item && typeof item === 'object' && !Array.isArray(item)).map(item => {
+    const name = String(item.name || '').trim()
+    const fee = String(item.fee || '').trim()
+    const quota = String(item.quota || '').trim()
+    const note = String(item.note || '').trim()
+    return {
+      ...item,
+      displayText: `${name}${fee ? ` ${fee}` : ''}${quota ? `（名额：${quota}）` : ''}${note ? `（${note}）` : ''}`
+    }
+  }).filter(item => item.name)
+}
+
 Page({
   data: {
     id: 'suiping',
     // Keep the first render fully defined. WeChat's view layer can fail its
     // initial patch when a large WXML tree reads properties from null.
     event: {
-      id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: [], sectionTitles: eventSectionTitles()
+      id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: [], sectionTitles: eventSectionTitles(), contentBlocks: []
     },
     prizeTables: [], event2PrizeTables: [], event3PrizeTables: [],
     liked: false, likeCount: 0, commentCount: 0, shareCount: 0,
@@ -97,6 +155,9 @@ Page({
       const publishedEvent = {
         ...base,
         id: String(record.id || record._id),
+        // Dynamic signupOptions replace the legacy static signup rows; keeping
+        // both fields would render the registration section twice.
+        signup: [],
         title: String(record.title || base.title || '赛事详情'),
         date: eventDate(record) || base.date || '',
         dateFull: String(record.dateFull || eventDate(record) || base.dateFull || ''),
@@ -109,12 +170,15 @@ Page({
         detailText: String(record.detailText || ''),
         rulesText: String(record.rulesText || ''),
         awardsText: String(record.awardsText || ''),
+        contentBlocks: record.contentBlocksConfigured === true || (record.contentBlocksConfigured !== false && Array.isArray(record.contentBlocks))
+          ? normalizeContentBlocks(Array.isArray(record.contentBlocks) ? record.contentBlocks : [])
+          : (String(record.id || record._id) === 'suiping' ? normalizeContentBlocks(require('./event-template').contentBlocks) : []),
         registrationDeadline: String(record.registrationDeadline || ''),
         contactName: String(record.contactName || ''),
         contactPhone: String(record.contactPhone || ''),
         contactWechat: String(record.contactWechat || ''),
         registrationNote: String(record.registrationNote || ''),
-        signupOptions: Array.isArray(record.signupOptions) ? record.signupOptions : [],
+        signupOptions: normalizeSignupOptions(record.signupOptions),
         registrationEnabled: record.registrationEnabled === true,
         workBackendEnabled: record.workBackendEnabled !== false,
         coverFileId: String(record.coverFileId || ''),
@@ -455,6 +519,7 @@ Page({
       detailText: '',
       rulesText: '',
       awardsText: '',
+      contentBlocks: [],
       registrationDeadline: '',
       contactName: '',
       contactPhone: '',

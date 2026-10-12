@@ -23,8 +23,7 @@
         <view wx:if="{{event.registrationNote}}" class="prose generic-detail-copy">{{event.registrationNote}}</view>
         <view wx:if="{{event.signupOptions && event.signupOptions.length}}" class="signup-list">
           <view class="signup-row generic-signup-row" wx:for="{{event.signupOptions}}" wx:key="index">
-            <view class="generic-signup-main"><text class="generic-signup-name">{{item.name}}</text><text wx:if="{{item.fee}}" class="generic-signup-meta">费用：{{item.fee}}</text><text wx:if="{{item.quota}}" class="generic-signup-meta">名额：{{item.quota}}</text></view>
-            <text wx:if="{{item.note}}" class="generic-signup-note">{{item.note}}</text>
+            <text>{{item.displayText}}</text>
           </view>
         </view>
       </view>
@@ -39,7 +38,6 @@
         <view wx:if="{{event.contactName}}" class="info-line"><text class="info-label">联系人：</text><text>{{event.contactName}}</text></view>
         <view wx:if="{{event.contactPhone}}" class="info-line"><text class="info-label">联系电话：</text><text>{{event.contactPhone}}</text></view>
         <view wx:if="{{event.contactWechat}}" class="info-line"><text class="info-label">微信号：</text><text>{{event.contactWechat}}</text></view>
-        <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
       </view>
       <view wx:else class="section info-section">
         <view class="section-title">{{event.sectionTitles.info || '赛事信息'}}</view>
@@ -51,9 +49,10 @@
         <view class="info-line"><text class="info-label">微信号：</text><text>13269191919</text></view>
       </view>
 
-      <view wx:if="{{event && event.isDynamic && event.detailText}}" class="section generic-copy-section">
+      <view wx:if="{{event && event.isDynamic && (event.coverUrl || event.detailText)}}" class="section generic-copy-section">
         <view class="section-title">{{event.sectionTitles.detail || '赛事详情'}}</view>
-        <view class="prose generic-detail-copy">{{event.detailText}}</view>
+        <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
+        <view wx:if="{{event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
       </view>
 
       <view wx:if="{{event && event.isDynamic && event.rulesText}}" class="section generic-copy-section">
@@ -63,6 +62,29 @@
       <view wx:if="{{event && event.isDynamic && event.awardsText}}" class="section generic-copy-section">
         <view class="section-title">{{event.sectionTitles.awards || '奖项设置'}}</view>
         <view class="prose generic-detail-copy">{{event.awardsText}}</view>
+      </view>
+
+      <view wx:if="{{event && event.isDynamic && event.contentBlocks && event.contentBlocks.length}}" class="section generic-copy-section generic-content-blocks">
+        <block wx:for="{{event.contentBlocks}}" wx:for-item="contentBlock" wx:key="key">
+          <view wx:if="{{contentBlock.type === 'heading'}}" class="sub-title content-block-heading">{{contentBlock.text}}</view>
+          <view wx:elif="{{contentBlock.type === 'paragraph' || contentBlock.type === 'text'}}" class="prose generic-detail-copy">{{contentBlock.text}}</view>
+          <view wx:elif="{{contentBlock.type === 'note'}}" class="prose note generic-detail-copy">{{contentBlock.text}}</view>
+          <image wx:elif="{{contentBlock.type === 'image' && contentBlock.src}}" class="detail-poster content-block-image" src="{{contentBlock.src}}" mode="widthFix" lazy-load="true" />
+          <view wx:elif="{{contentBlock.type === 'banner'}}" class="stage-banner stage-banner-{{contentBlock.theme}}"><view class="stage-brand">赛车视界<text>RACING VIEW</text></view><text class="stage-banner-title">{{contentBlock.text}}</text><text class="stage-number">{{contentBlock.number}}</text></view>
+          <view wx:elif="{{contentBlock.type === 'divider'}}" class="separator content-block-divider"></view>
+          <view wx:elif="{{contentBlock.type === 'list'}}" class="content-block-list">
+            <view wx:for="{{contentBlock.items}}" wx:for-item="listItem" wx:key="index" class="prose numbered content-block-list-item">{{listItem}}</view>
+          </view>
+          <view wx:elif="{{contentBlock.type === 'table'}}" class="prize-block content-block-table">
+            <view wx:if="{{contentBlock.title}}" class="prize-title">{{contentBlock.title}}</view>
+            <view wx:if="{{contentBlock.headers.length}}" class="stage-head-row">
+              <view wx:for="{{contentBlock.headers}}" wx:for-item="tableHeader" wx:key="index" class="stage-head">{{tableHeader}}</view>
+            </view>
+            <view wx:for="{{contentBlock.rows}}" wx:for-item="tableRow" wx:key="index" class="prize-row">
+              <view wx:for="{{tableRow}}" wx:for-item="tableCell" wx:key="index" class="prize-cell">{{tableCell}}</view>
+            </view>
+          </view>
+        </block>
       </view>
 
       <view wx:if="{{event && event.id === 'suiping' && !event.isDynamic}}" class="separator"></view>

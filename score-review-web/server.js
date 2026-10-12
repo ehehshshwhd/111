@@ -38,9 +38,16 @@ function serve(res, urlPath) {
   const templateCover = requested === 'event-template-cover.jpg'
     ? (fs.existsSync(path.join(WEB_ROOT, requested)) ? path.join(WEB_ROOT, requested) : path.resolve(WEB_ROOT, '..', 'racing-app', 'assets', 'events', 'event2-poster-crop.jpg'))
     : null
-  const file = templateCover || path.resolve(WEB_ROOT, requested)
+  const bundledEventAssets = {
+    'event-assets/stage-01.jpg': path.join(WEB_ROOT, 'event-assets', 'stage-01.jpg'),
+    'event-assets/stage-02-banner.jpg': path.join(WEB_ROOT, 'event-assets', 'stage-02-banner.jpg'),
+    'event-assets/stage-03.jpg': path.join(WEB_ROOT, 'event-assets', 'stage-03.jpg')
+  }
+  const bundledEventAsset = bundledEventAssets[requested] || null
+  const file = templateCover || bundledEventAsset || path.resolve(WEB_ROOT, requested)
   const isBundledTemplateCover = requested === 'event-template-cover.jpg' && templateCover === file
-  if ((!file.startsWith(path.resolve(WEB_ROOT) + path.sep) && !isBundledTemplateCover) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, { ok: false, message: '页面不存在' })
+  const isBundledEventAsset = bundledEventAsset === file
+  if ((!file.startsWith(path.resolve(WEB_ROOT) + path.sep) && !isBundledTemplateCover && !isBundledEventAsset) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, { ok: false, message: '页面不存在' })
   const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg' }
   let data = fs.readFileSync(file)
   if (path.basename(file) === 'index.html' && process.env.SCORE_REVIEW_API_BASE === 'same-origin') {

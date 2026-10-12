@@ -11,6 +11,7 @@ RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY score-review-web/server.js score-review-web/cloud-store.js score-review-web/index.html ./
 COPY score-review-web/event-template-cover.jpg ./event-template-cover.jpg
+COPY score-review-web/event-assets ./event-assets
 
 EXPOSE 8080
 CMD ["node", "server.js"]
