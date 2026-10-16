@@ -250,7 +250,12 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .event-preview-wide .mini-preview-stage-brand small{display:block;color:#fff;font-size:6.2px;line-height:6.8px;font-weight:400}
 .event-preview-wide .mini-preview-stage-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:6.2px}
 .event-preview-wide .mini-preview-stage-banner b{font-size:22px;font-weight:700;margin-left:auto;line-height:1}
-/* Indent prose without shifting headings, lists, images or table cells. */
+/* The full editor is the source of truth for detail-body layout. Keep the phone preview's editable body at the same list and paragraph metrics. */
+.article-editor-page.event-preview-wide .mini-preview-section,.article-editor-preview-active .event-preview-wide .event-detail-template .mini-preview-section{padding-left:0;padding-right:0}
+.article-editor-page.event-preview-wide .mini-preview-section h3,.article-editor-preview-active .event-preview-wide .event-detail-template .mini-preview-section h3{padding-left:0;border-left:0}
+.article-editor-page.event-preview-wide .mini-preview-list,.article-editor-preview-active .event-preview-wide .event-detail-template .mini-preview-list{display:block;margin:1em 0;padding-left:40px;list-style-position:outside}
+.article-editor-page.event-preview-wide .mini-preview-list li,.article-editor-preview-active .event-preview-wide .event-detail-template .mini-preview-list li{margin:0;font-size:16px;line-height:1.85;letter-spacing:normal;color:#343943;word-break:break-word;overflow-wrap:normal;text-indent:0}
+.article-editor-page.event-preview-wide .mini-preview-generic-copy,.article-editor-page.event-preview-wide .mini-preview-note,.article-editor-preview-active .event-preview-wide .event-detail-template .mini-preview-generic-copy,.article-editor-preview-active .event-preview-wide .event-detail-template .mini-preview-note{font-size:16px;line-height:1.85;letter-spacing:normal;text-indent:0!important;color:#343943}/* Indent prose without shifting headings, lists, images or table cells. */
 .event-preview-wide .mini-preview-generic-copy,.event-preview-wide .mini-preview-note{ text-indent:2em }
 /* Fit the phone to the available screen height and keep the long page scrollable inside it. */
 .event-preview-wide{height:100vh;height:100dvh;overflow:hidden}
