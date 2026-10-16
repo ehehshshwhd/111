@@ -51,7 +51,18 @@ function serve(res, urlPath) {
     'event-assets/stage-02-banner.jpg': path.join(WEB_ROOT, 'event-assets', 'stage-02-banner.jpg'),
     'event-assets/stage-03.jpg': path.join(WEB_ROOT, 'event-assets', 'stage-03.jpg')
   }
-  const bundledEventAsset = bundledEventAssets[requested] || null
+  let bundledEventAsset = bundledEventAssets[requested] || null
+  if (!bundledEventAsset && /^event-assets\//i.test(requested)) {
+    let assetName = ''
+    try { assetName = decodeURIComponent(requested.slice('event-assets/'.length)) } catch {}
+    if (/^[A-Za-z0-9._-]+$/.test(assetName)) {
+      const candidates = [
+        path.join(WEB_ROOT, 'event-assets', assetName),
+        path.resolve(WEB_ROOT, '..', 'racing-app', 'subpackages', 'events', 'assets', assetName)
+      ]
+      bundledEventAsset = candidates.find(file => fs.existsSync(file) && fs.statSync(file).isFile()) || null
+    }
+  }
   const file = templateCover || bundledEventAsset || path.resolve(WEB_ROOT, requested)
   const isBundledTemplateCover = requested === 'event-template-cover.jpg' && templateCover === file
   const isBundledEventAsset = bundledEventAsset === file
