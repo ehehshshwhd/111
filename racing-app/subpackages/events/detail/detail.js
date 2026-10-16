@@ -1,12 +1,27 @@
 const auth = require('../../../utils/auth')
 const container = require('../../../utils/cloud-container')
+const { ALL_STAGES } = require('../../../utils/stages')
+
+function normalizeEventId(value) {
+  const id = String(value == null ? '' : value).trim()
+  return /^[A-Za-z0-9_-]{1,80}$/.test(id) ? id : ''
+}
 
 function readEventList(response) {
   let payload = response && response.data
   if (typeof payload === 'string') {
-    try { payload = JSON.parse(payload) } catch (_) { return [] }
+    try { payload = JSON.parse(payload) } catch (_) { throw new Error('赛事数据响应不是有效 JSON') }
   }
-  return payload && Array.isArray(payload.events) ? payload.events : []
+  if (!payload || payload.ok !== true || !Array.isArray(payload.events)) throw new Error('赛事数据响应不完整')
+  const seen = new Set()
+  payload.events.forEach((event, index) => {
+    if (!event || typeof event !== 'object' || Array.isArray(event)) throw new Error(`第 ${index + 1} 条赛事数据格式无效`)
+    const id = String(event.id || event._id || '').trim()
+    if (!id) throw new Error(`第 ${index + 1} 条赛事缺少 ID`)
+    if (seen.has(id)) throw new Error(`赛事 ${id} 重复，未更新赛事列表`)
+    seen.add(id)
+  })
+  return payload.events
 }
 
 function eventDate(event) {
@@ -34,22 +49,145 @@ function eventSectionTitles(value) {
   }, {})
 }
 
+function eventInfoLabels(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  const defaults = { date: '比赛时间：', deadline: '报名截止：', location: '集合地址：', contactName: '联系人：', phone: '联系电话：', wechat: '微信号：' }
+  return Object.keys(defaults).reduce((result, key) => {
+    const text = String(source[key] == null ? defaults[key] : source[key]).trim()
+    result[key] = text || defaults[key]
+    return result
+  }, {})
+}
+
+// The full-page editor publishes a single, already-formatted HTML document.
+// Keep the client-side fallback conservative as well: rich-text should never
+// execute scripts or event handlers received from a remote event record.
+function normalizeDetailPageHtml(value) {
+  return String(value == null ? '' : value)
+    .slice(0, 300000)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe\s*>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(\s(?:href|src)\s*=\s*["'])\s*javascript:[^"']*(["'])/gi, '$1$2')
+}
+
+function normalizeDetailPageImageEntries(value) {
+  const entries = []
+  const add = (fileId, url) => {
+    const id = String(fileId || '').trim()
+    if (!id) return
+    entries.push({ fileId: id.slice(0, 500), url: String(url || '').trim().slice(0, 2000) })
+  }
+  if (Array.isArray(value)) {
+    value.forEach(item => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) add(item.fileId || item.fileID || item.id, item.url || item.src || item.miniUrl)
+      else if (typeof item === 'string') add(item, '')
+    })
+  } else if (value && typeof value === 'object') {
+    Object.keys(value).forEach(fileId => add(fileId, value[fileId]))
+  }
+  const seen = new Set()
+  return entries.filter(item => !seen.has(item.fileId) && seen.add(item.fileId))
+}
+
+function detailPageCloudFileId(value) {
+  const source = String(value || '').trim()
+  return /^(?:cloud|wxcloud|cloudbase):\/\//i.test(source) ? source : ''
+}
+
+function detailPageImageIds(html) {
+  const source = String(html || '')
+  const ids = []
+  const seen = new Set()
+  const add = value => {
+    const id = detailPageCloudFileId(value)
+    if (id && !seen.has(id)) { seen.add(id); ids.push(id) }
+  }
+  const dataFilePattern = /\bdata-file-id\s*=\s*["']([^"']+)["']/gi
+  const srcPattern = /\bsrc\s*=\s*["']([^"']+)["']/gi
+  let match
+  while ((match = dataFilePattern.exec(source))) add(match[1])
+  while ((match = srcPattern.exec(source))) add(match[1])
+  return ids
+}
+
+function replaceDetailPageImageUrls(html, urls) {
+  const source = String(html || '')
+  return source.replace(/<img\b[^>]*>/gi, tag => {
+    const dataIdMatch = tag.match(/\bdata-file-id\s*=\s*["']([^"']+)["']/i)
+    const srcMatch = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)
+    const miniSrcMatch = tag.match(/\bdata-mini-src\s*=\s*["']([^"']+)["']/i)
+    const fileId = detailPageCloudFileId(dataIdMatch && dataIdMatch[1] || srcMatch && srcMatch[1])
+    const url = (fileId && urls && urls.get(fileId)) || (miniSrcMatch && miniSrcMatch[1])
+    if (!url) return tag.replace(/\s+data-mini-src\s*=\s*["'][^"']*["']/i, '')
+    const escapedUrl = url.replace(/["&<>]/g, char => ({ '"': '&quot;', '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char]))
+    const withoutSrc = tag.replace(/\s+src\s*=\s*["'][^"']*["']/i, '').replace(/\s+data-file-id\s*=\s*["'][^"']*["']/i, '').replace(/\s+data-mini-src\s*=\s*["'][^"']*["']/i, '')
+    return withoutSrc.replace(/\s*\/?>$/, '') + ` src="${escapedUrl}" />`
+  })
+}
+
+// The web editor emits the results CTA as an anchor with the
+// `event-action-results` marker.  Rich-text does not forward anchor taps to
+// page handlers, so split that one marker out and render the native button at
+// the same point in the scroll view.  The editor's marker normally sits in a
+// single action-row wrapper; unwrap that wrapper while splitting so neither
+// rich-text fragment contains an unmatched tag.
+function splitDetailPageResults(html) {
+  const source = String(html || '')
+  const marker = /<a\b[^>]*class\s*=\s*["'][^"']*\bevent-action-results\b[^"']*["'][^>]*>[\s\S]*?<\/a\s*>/i
+  const match = marker.exec(source)
+  if (!match) return { html: source, before: source, after: '', hasResultsAction: false, resultsLabel: '', actionPosition: 'append' }
+  const start = match.index
+  const end = start + match[0].length
+  const resultsLabel = match[0].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 80)
+  const prefix = source.slice(0, start)
+  const suffix = source.slice(end)
+  const wrapper = prefix.match(/<([a-z][\w:-]*)\b[^>]*class\s*=\s*["'][^"']*(?:action-row|mini-preview-action-row)[^"']*["'][^>]*>\s*$/i)
+  const closing = suffix.match(/^\s*<\/([a-z][\w:-]*)\s*>/i)
+  if (wrapper && closing && wrapper[1].toLowerCase() === closing[1].toLowerCase()) {
+    const wrapperStart = wrapper.index
+    return {
+      html: source,
+      before: prefix.slice(0, wrapperStart),
+      after: suffix.slice(closing[0].length),
+      hasResultsAction: true,
+      resultsLabel,
+      actionPosition: 'inline'
+    }
+  }
+  // Without a recognizable action-row wrapper, keep the complete HTML intact
+  // and put the native CTA after it. Splitting arbitrary authored markup could
+  // leave unbalanced tags on either side of the WXML button.
+  return { html: source, before: source, after: '', hasResultsAction: false, resultsLabel: '', actionPosition: 'append' }
+}
+
+function normalizeDetailPageParts(value) {
+  const html = normalizeDetailPageHtml(value)
+  return { html, ...splitDetailPageResults(html) }
+}
+
 function normalizeContentBlocks(value) {
   if (!Array.isArray(value)) return []
+  if (value.length > 100) throw new Error('赛事正文超过 100 项，拒绝不完整显示')
   const supportedTypes = new Set(['heading', 'paragraph', 'text', 'note', 'image', 'banner', 'divider', 'list', 'table'])
   return value.reduce((blocks, block, index) => {
-    if (!block || typeof block !== 'object' || Array.isArray(block)) return blocks
+    if (!block || typeof block !== 'object' || Array.isArray(block)) throw new Error(`赛事正文第 ${index + 1} 项格式无效`)
     const type = String(block.type || '').trim().toLowerCase()
-    if (!supportedTypes.has(type)) return blocks
+    if (!supportedTypes.has(type)) throw new Error(`赛事正文第 ${index + 1} 项类型不支持：${type || '空'}`)
 
     const textValue = block.text == null ? (block.content == null ? '' : block.content) : block.text
+    if (textValue != null && !['string', 'number'].includes(typeof textValue)) throw new Error(`赛事正文第 ${index + 1} 项文字格式无效`)
     const text = typeof textValue === 'string' ? textValue : String(textValue)
     const toCellText = cell => {
       if (cell == null) return ''
       if (typeof cell === 'string' || typeof cell === 'number') return String(cell)
-      if (typeof cell === 'object') return String(cell.text || cell.label || cell.value || '')
-      return ''
+      throw new Error(`赛事正文第 ${index + 1} 项列表/表格单元格格式无效`)
     }
+    if (Array.isArray(block.items) && block.items.length > 200) throw new Error(`赛事正文第 ${index + 1} 项列表超过 200 行`)
+    if (Array.isArray(block.headers) && block.headers.length > 30) throw new Error(`赛事正文第 ${index + 1} 项表格超过 30 列`)
+    if (Array.isArray(block.rows) && (block.rows.length > 200 || block.rows.some(row => !Array.isArray(row) || row.length > 30))) throw new Error(`赛事正文第 ${index + 1} 项表格超过支持范围`)
+    if (['heading', 'paragraph', 'text', 'note'].includes(type) && text.length > 10000) throw new Error(`赛事正文第 ${index + 1} 项文字超过限制`)
     const items = Array.isArray(block.items)
       ? block.items.map(toCellText).filter(item => item !== '')
       : (type === 'list' ? text.split(/\r?\n/).map(item => item.trim()).filter(Boolean) : [])
@@ -60,18 +198,24 @@ function normalizeContentBlocks(value) {
     const url = String(block.miniUrl || block.url || '')
 
     const normalized = {
+      ...block,
       key: String(block.id || index),
       type,
       text,
+      html: typeof block.html === 'string' ? block.html.slice(0, 30000) : '',
+      align: ['left', 'center', 'right', 'justify'].includes(String(block.align)) ? String(block.align) : 'left',
+      bold: block.bold === true,
+      listStyle: block.listStyle === 'ordered' ? 'ordered' : 'unordered',
       items,
       headers,
       rows,
       title: String(block.title || ''),
-      src: url
+      src: url,
+      fileId: String(block.fileId || '')
     }
     if (type === 'banner') {
       normalized.theme = ['02', '03'].includes(String(block.theme)) ? String(block.theme) : '02'
-      normalized.number = String(block.number || '').slice(0, 4)
+      normalized.number = String(block.number || '').slice(0, 20)
     }
     blocks.push(normalized)
     return blocks
@@ -80,7 +224,9 @@ function normalizeContentBlocks(value) {
 
 function normalizeSignupOptions(value) {
   if (!Array.isArray(value)) return []
-  return value.filter(item => item && typeof item === 'object' && !Array.isArray(item)).map(item => {
+  if (value.length > 100) throw new Error('报名选项超过 100 项，拒绝不完整显示')
+  if (value.some(item => !item || typeof item !== 'object' || Array.isArray(item))) throw new Error('报名选项格式无效')
+  return value.map(item => {
     const name = String(item.name || '').trim()
     const fee = String(item.fee || '').trim()
     const quota = String(item.quota || '').trim()
@@ -89,7 +235,7 @@ function normalizeSignupOptions(value) {
       ...item,
       displayText: `${name}${fee ? ` ${fee}` : ''}${quota ? `（名额：${quota}）` : ''}${note ? `（${note}）` : ''}`
     }
-  }).filter(item => item.name)
+  })
 }
 
 Page({
@@ -98,19 +244,22 @@ Page({
     // Keep the first render fully defined. WeChat's view layer can fail its
     // initial patch when a large WXML tree reads properties from null.
     event: {
-      id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: [], sectionTitles: eventSectionTitles(), contentBlocks: []
+      id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: [], sectionTitles: eventSectionTitles(),
+      infoLabels: eventInfoLabels(), contentBlocks: [], detailPageConfigured: false, detailPageHtml: '',
+      detailPageBeforeHtml: '', detailPageAfterHtml: '', detailPageHasResultsAction: false, detailPageResultsLabel: ''
     },
     prizeTables: [], event2PrizeTables: [], event3PrizeTables: [],
-    liked: false, likeCount: 0, commentCount: 0, shareCount: 0,
+    liked: false, likeCount: 0, commentCount: 0, shareCount: 0, viewCount: 0,
     detailReady: false, interactionBusy: false,
     commentVisible: false, commentText: '', comments: [],
     resultsSheetVisible: false, scoreViewVisible: false, scoreGroups: [], selectedScore: null,
     scoreLoading: true, scoreLoadError: false,
-    canAccessWork: false, eventConfigReady: false
+    canAccessWork: false, eventConfigReady: false, eventCloudReady: false, eventConfigError: ''
   },
   onLoad(query) {
     query = query || {}
-    const id = query.id || 'suiping'
+    const requestedId = query.id || 'suiping'
+    const id = normalizeEventId(requestedId)
     const event = this.makeEvent(id)
     // Keep the first render small. Prize tables are only needed by the long
     // race-detail section, which is currently kept lazy on real devices.
@@ -125,35 +274,54 @@ Page({
       event2PrizeTables: event2Labels.map(label => ({ title: label, headers: [], rows: [], subtotals: [] })),
       event3PrizeTables: event3Labels.map(label => ({ title: label, headers: [], rows: [], subtotals: [] })),
       detailReady: id === 'suiping',
-      scoreGroups: [], eventConfigReady: false
+      scoreGroups: [], eventConfigReady: false,
+      eventConfigError: id ? '' : '赛事标识无效，无法读取赛事详情或工作后台。'
     })
     // The long race-detail tree previously mounted in a delayed setData call.
     // On real devices that second large patch can crash WebView rendering
     // (setChanges), leaving only the native navigation bar visible. Keep the
     // detail tree lazy until it is split into smaller sections.
     this._detailTimer = null
-    this.loadInteractionStats(id)
-    this.loadWorkAccess()
-    this.loadPublishedEvent(id)
-    this.loadPublishedResults(id)
+    if (id) {
+      this.recordViewOpen(id)
+      this.loadWorkAccess()
+      this.loadPublishedEvent(id)
+      this.loadPublishedResults(id)
+    } else {
+      this.safeSetData({ eventConfigReady: true, canAccessWork: false, scoreLoading: false, scoreLoadError: true })
+    }
     if (query.fromShare) this.recordShareOpen(query.fromShare)
   },
   loadPublishedEvent(id) {
     const requestId = (this._eventRequestId || 0) + 1
     this._eventRequestId = requestId
+    this.safeSetData({ eventConfigError: '', eventCloudReady: false, canAccessWork: false })
     container.call('/api/public/events').then(readEventList).then(events => {
       if (this.__unloaded || this._eventRequestId !== requestId) return
       const record = events.find(item => String(item && (item.id || item._id) || '') === String(id))
       if (!record) {
-        if (String(id) === 'suiping') {
-          this.safeSetData({ eventConfigReady: true })
-          this.loadWorkAccess()
-        }
+        // A successful cloud response is authoritative. Do not resurrect the
+        // built-in suiping page after an administrator unpublishes/deletes it.
+        // The old page remains available only when the network request itself
+        // fails (see catch below), so an offline user can still view cached UI.
+        this.safeSetData({
+          event: { ...(this.data.event || {}), id: String(id), title: '', date: '', location: '', status: '', signup: [], contentBlocks: [] },
+          detailReady: false,
+          eventConfigReady: true,
+          eventCloudReady: false,
+          canAccessWork: false,
+          eventConfigError: '没有找到这场赛事，可能已下架或暂未发布。'
+        })
         return
       }
       const base = this.data.event || {}
+      const detailPage = normalizeDetailPageParts(replaceDetailPageImageUrls(record.detailPageHtml, new Map()))
       const publishedEvent = {
         ...base,
+        // Retain custom fields sent by the web event editor so future mini-
+        // program features can consume them without the detail page stripping
+        // them during normalization.
+        ...record,
         id: String(record.id || record._id),
         // Dynamic signupOptions replace the legacy static signup rows; keeping
         // both fields would render the registration section twice.
@@ -167,9 +335,17 @@ Page({
         status: String(record.status || base.status || ''),
         notice: record.notice == null ? '' : String(record.notice || ''),
         sectionTitles: eventSectionTitles(record.sectionTitles || base.sectionTitles),
+        infoLabels: eventInfoLabels(record.infoLabels || base.infoLabels),
         detailText: String(record.detailText || ''),
         rulesText: String(record.rulesText || ''),
         awardsText: String(record.awardsText || ''),
+        detailPageConfigured: record.detailPageConfigured === true && !!detailPage.html,
+        detailPageHtml: detailPage.html,
+        detailPageBeforeHtml: detailPage.before,
+        detailPageAfterHtml: detailPage.after,
+        detailPageHasResultsAction: detailPage.hasResultsAction,
+        detailPageResultsLabel: detailPage.resultsLabel,
+        detailPageImages: normalizeDetailPageImageEntries(record.detailPageImages),
         contentBlocks: record.contentBlocksConfigured === true || (record.contentBlocksConfigured !== false && Array.isArray(record.contentBlocks))
           ? normalizeContentBlocks(Array.isArray(record.contentBlocks) ? record.contentBlocks : [])
           : (String(record.id || record._id) === 'suiping' ? normalizeContentBlocks(require('./event-template').contentBlocks) : []),
@@ -181,6 +357,12 @@ Page({
         signupOptions: normalizeSignupOptions(record.signupOptions),
         registrationEnabled: record.registrationEnabled === true,
         workBackendEnabled: record.workBackendEnabled !== false,
+        groups: Array.isArray(record.groups) ? record.groups : [],
+        visibleGroups: Array.isArray(record.visibleGroups) ? record.visibleGroups : [],
+        groupStageNames: record.groupStageNames && typeof record.groupStageNames === 'object' && !Array.isArray(record.groupStageNames) ? record.groupStageNames : {},
+        stageNames: Array.isArray(record.stageNames) ? record.stageNames : [],
+        scoringType: String(record.scoringType || 'rally'),
+        rankingMode: record.rankingMode === 'total' ? 'total' : 'best',
         coverFileId: String(record.coverFileId || ''),
         coverUrl: String(record.coverUrl || ''),
         publishedAt: record.publishedAt || null,
@@ -188,16 +370,24 @@ Page({
         isGeneric: true
       }
       if (publishedEvent.id === 'suiping') this.safeSetData({ detailReady: false })
-      this.safeSetData({ eventConfigReady: true })
+      this.safeSetData({ eventConfigReady: true, eventCloudReady: true })
       if (!publishedEvent.workBackendEnabled) this.safeSetData({ canAccessWork: false })
+      // Publish the full record before resolving temporary image URLs. The
+      // cover and body image requests can finish in either order.
+      this.safeSetData({ event: publishedEvent })
       this.resolveEventCover(publishedEvent)
+      this.resolveEventContentImages(publishedEvent)
+      this.resolveEventDetailPageImages(publishedEvent)
       this.loadWorkAccess()
     }).catch(error => {
-      // Keep the bundled legacy event and its existing staff access available when the cloud is offline.
+      // Legacy detail content can remain visible offline, but work access
+      // stays closed until the current cloud event has been verified.
       console.warn('读取赛事详情失败，继续显示内置内容', error)
       if (String(id) === 'suiping') {
-        this.safeSetData({ eventConfigReady: true })
+        this.safeSetData({ eventConfigReady: true, eventConfigError: '云端赛事读取失败，当前显示的是小程序内置旧版内容。请重试确认最新赛事数据。' })
         this.loadWorkAccess()
+      } else {
+        this.safeSetData({ eventConfigReady: true, eventConfigError: '赛事详情读取失败，请检查网络后重试。' })
       }
     })
   },
@@ -212,16 +402,20 @@ Page({
       }
       if (this.__unloaded || this._scoreRequestId !== requestId) return
       if (!payload || payload.ok !== true || String(payload.eventId || '') !== String(eventId || '')) {
-        this.safeSetData({ scoreGroups: [], scoreLoading: false, scoreLoadError: false })
+        this.safeSetData({ scoreGroups: [], scoreLoading: false, scoreLoadError: true })
         return
       }
       const stageNames = Array.isArray(payload.stageNames)
         ? payload.stageNames.map(name => String(name || '').trim()).filter(Boolean)
         : []
+      if (stageNames.length !== (Array.isArray(payload.stageNames) ? payload.stageNames.length : 0)) throw new Error('已发布成绩包含无效赛段名称')
       const groupNames = Array.isArray(payload.groups)
         ? payload.groups.map(group => String(group && typeof group === 'object' ? group.name || group.group || '' : group || '').trim()).filter(Boolean)
         : []
+      if (groupNames.length !== (Array.isArray(payload.groups) ? payload.groups.length : 0)) throw new Error('已发布成绩包含无效组别')
       const rows = Array.isArray(payload.rows) ? payload.rows : []
+      if (payload.rowCount != null && Number(payload.rowCount) !== rows.length) throw new Error(`已发布成绩只返回 ${rows.length}/${payload.rowCount} 条`)
+      if (rows.some(row => !row || typeof row !== 'object' || Array.isArray(row) || !String(row.carNumber || '').trim() || !String(row.group || '').trim())) throw new Error('已发布成绩存在缺车号或缺组别的记录')
       const groups = groupNames.map(name => ({
         name,
         stages: stageNames.filter(stage => rows.some(row => String(row && row.group || '') === name && row.stageTimes && row.stageTimes[stage])).concat(['总成绩']),
@@ -243,17 +437,92 @@ Page({
     })
   },
   resolveEventCover(event) {
-    if (event.coverUrl || !event.coverFileId || !wx.cloud || typeof wx.cloud.getTempFileURL !== 'function') {
+    if (!event.coverFileId || !wx.cloud || typeof wx.cloud.getTempFileURL !== 'function') {
+      if (event.coverFileId && !event.coverUrl) this.markEventAssetFailure('封面')
       this.safeSetData({ event })
       return
     }
     wx.cloud.getTempFileURL({ fileList: [event.coverFileId] }).then(response => {
       const file = response && response.fileList && response.fileList[0]
-      this.safeSetData({ event: { ...event, coverUrl: file && file.tempFileURL || '' } })
+      const current = this.data.event || event
+      const coverUrl = file && file.status === 0 && file.tempFileURL || current.coverUrl || ''
+      if (!coverUrl) this.markEventAssetFailure('封面')
+      this.safeSetData({ event: { ...current, coverUrl } })
     }).catch(error => {
       console.warn('赛事详情封面加载失败', error)
+      if (!event.coverUrl) this.markEventAssetFailure('封面')
       this.safeSetData({ event })
     })
+  },
+  resolveEventContentImages(event) {
+    const blocks = Array.isArray(event && event.contentBlocks) ? event.contentBlocks : []
+    const fileIds = [...new Set(blocks.filter(block => block && block.type === 'image' && block.fileId).map(block => block.fileId))]
+    if (!fileIds.length) return
+    if (!wx.cloud || typeof wx.cloud.getTempFileURL !== 'function') {
+      if (blocks.some(block => block && block.type === 'image' && block.fileId && !block.url && !block.miniUrl)) this.markEventAssetFailure('赛事正文图片')
+      return
+    }
+    const batches = []
+    for (let index = 0; index < fileIds.length; index += 50) batches.push(fileIds.slice(index, index + 50))
+    Promise.all(batches.map(batch => Promise.resolve().then(() => wx.cloud.getTempFileURL({ fileList: batch })).catch(error => {
+      console.warn('赛事正文图片分批加载失败', error)
+      return { fileList: [] }
+    }))).then(responses => {
+      const files = responses.reduce((all, response) => all.concat(response && response.fileList || []), [])
+      const urls = new Map(blocks
+        .filter(block => block && block.type === 'image' && block.fileId && (block.url || block.miniUrl))
+        .map(block => [block.fileId, block.url || block.miniUrl]))
+      files.forEach(file => {
+        if (file && file.status === 0 && file.tempFileURL) urls.set(file.fileID, file.tempFileURL)
+      })
+      const missing = fileIds.filter(fileId => !urls.has(fileId) && !blocks.some(block => block && block.type === 'image' && block.fileId === fileId && (block.url || block.miniUrl)))
+      if (missing.length) this.markEventAssetFailure(`${missing.length} 张赛事正文图片`)
+      const nextBlocks = (this.data.event && Array.isArray(this.data.event.contentBlocks) ? this.data.event.contentBlocks : blocks)
+        .map(block => urls.has(block.fileId) ? { ...block, src: urls.get(block.fileId) } : block)
+      this.safeSetData({ event: { ...(this.data.event || event), contentBlocks: nextBlocks } })
+    }).catch(error => console.warn('赛事正文图片加载失败', error))
+  },
+  resolveEventDetailPageImages(event) {
+    if (!event || event.detailPageConfigured !== true || !event.detailPageHtml) return
+    const declared = normalizeDetailPageImageEntries(event.detailPageImages)
+    const fileIds = [...new Set(declared.map(item => item.fileId).concat(detailPageImageIds(event.detailPageHtml)))]
+    if (!fileIds.length) return
+    if (!wx.cloud || typeof wx.cloud.getTempFileURL !== 'function') {
+      this.markEventAssetFailure('赛事正文图片')
+      return
+    }
+    const batches = []
+    for (let index = 0; index < fileIds.length; index += 50) batches.push(fileIds.slice(index, index + 50))
+    Promise.all(batches.map(batch => Promise.resolve().then(() => wx.cloud.getTempFileURL({ fileList: batch })).catch(error => {
+      console.warn('整页赛事图片分批加载失败', error)
+      return { fileList: [] }
+    }))).then(responses => {
+      const files = responses.reduce((all, response) => all.concat(response && response.fileList || []), [])
+      const urls = new Map(declared
+        .filter(item => item.fileId && item.url)
+        .map(item => [item.fileId, item.url]))
+      files.forEach(file => {
+        if (file && file.fileID && file.status === 0 && file.tempFileURL) urls.set(file.fileID, file.tempFileURL)
+      })
+      const missing = fileIds.filter(fileId => !urls.has(fileId) && !declared.some(item => item.fileId === fileId && item.url))
+      if (missing.length) this.markEventAssetFailure(`${missing.length} 张赛事正文图片`)
+      const current = this.data.event || event
+      const html = replaceDetailPageImageUrls(current.detailPageHtml || event.detailPageHtml, urls)
+      const detailPage = normalizeDetailPageParts(html)
+      this.safeSetData({ event: {
+        ...current,
+        detailPageHtml: detailPage.html,
+        detailPageBeforeHtml: detailPage.before,
+        detailPageAfterHtml: detailPage.after,
+        detailPageHasResultsAction: detailPage.hasResultsAction,
+        detailPageResultsLabel: detailPage.resultsLabel
+      } })
+    }).catch(error => console.warn('整页赛事图片加载失败', error))
+  },
+  markEventAssetFailure(label) {
+    const message = `${label}读取失败，赛事文字已加载，但图片可能未完整显示。请检查云存储文件和权限后重试。`
+    const current = String(this.data.eventConfigError || '')
+    if (!current.includes(message)) this.safeSetData({ eventConfigError: current ? `${current} ${message}` : message })
   },
   safeSetData(payload, callback) {
     if (this.__unloaded || !this.setData) return
@@ -263,12 +532,22 @@ Page({
       console.warn('赛事详情视图更新失败', error)
     }
   },
+  retryPublishedEvent() {
+    this.loadPublishedEvent(this.data.id)
+  },
   onShow() {
     if (!this.data.event || !this.data.event.id) return
     this.loadWorkAccess()
   },
   hasWorkAccess(user) {
-    return !!(user && (user.isStaff || user.isAdmin || user.role === 'staff' || user.role === 'admin' || user.role === 'superadmin'))
+    if (!user) return false
+    const configuredStages = this.data.event && this.data.event.stageNames
+    const eventStages = Array.isArray(configuredStages) ? configuredStages.filter(stage => ALL_STAGES.includes(stage)) : []
+    if (!eventStages.length) return false
+    if (user.isAdmin || user.role === 'admin' || user.role === 'superadmin') return true
+    if (!(user.isStaff || user.role === 'staff')) return false
+    const allowedStages = Array.isArray(user.stagePermissions) ? user.stagePermissions : []
+    return eventStages.some(stage => allowedStages.includes(stage))
   },
   goBack() { wx.navigateBack({ delta: 1 }) },
   showNotice() {
@@ -346,14 +625,21 @@ Page({
     return String(value)
   },
   loadWorkAccess() {
+    const requestId = (this._workAccessRequestId || 0) + 1
+    this._workAccessRequestId = requestId
     const cached = auth.getUser()
     // 权限必须以云端最新结果为准，不能用旧缓存先显示工作后台入口。
     this.safeSetData({ canAccessWork: false })
     if (!cached) return
     auth.refreshRole().then(user => {
+      if (this.__unloaded || this._workAccessRequestId !== requestId) return
       if (!this.data.event || !this.data.event.id || !this.data.eventConfigReady) return
-      this.safeSetData({ canAccessWork: this.data.event.workBackendEnabled !== false && this.hasWorkAccess(user) })
+      const verifiedEvent = normalizeEventId(this.data.id)
+        && String(this.data.event.id) === String(this.data.id)
+        && this.data.eventCloudReady
+      this.safeSetData({ canAccessWork: !!(verifiedEvent && this.data.event.workBackendEnabled !== false && this.hasWorkAccess(user)) })
     }).catch(() => {
+      if (this.__unloaded || this._workAccessRequestId !== requestId) return
       this.safeSetData({ canAccessWork: false })
     })
   },
@@ -364,6 +650,11 @@ Page({
       return
     }
     auth.refreshRole().then(current => {
+      if (!normalizeEventId(this.data.id) || !this.data.eventConfigReady || !this.data.eventCloudReady || String(this.data.event && this.data.event.id || '') !== String(this.data.id)) {
+        this.safeSetData({ canAccessWork: false })
+        wx.showToast({ title: '未能验证当前赛事，无法进入工作后台', icon: 'none' })
+        return
+      }
       if (this.data.event && this.data.event.workBackendEnabled === false) {
         wx.showToast({ title: '本赛事暂未开放工作后台', icon: 'none' })
         return
@@ -374,7 +665,10 @@ Page({
         return
       }
       wx.navigateTo({ url: '/pages/work/work?eventId=' + encodeURIComponent(this.data.id) })
-    }).catch(() => wx.showToast({ title: '工作权限校验失败，请重试', icon: 'none' }))
+    }).catch(() => {
+      this.safeSetData({ canAccessWork: false })
+      wx.showToast({ title: '工作权限校验失败，请重试', icon: 'none' })
+    })
   },
   publishMoment() { wx.showToast({ title: '登录后可发布动态', icon: 'none' }) },
   callInteraction(action, data) {
@@ -397,6 +691,7 @@ Page({
       likeCount: Number(stats.likeCount) || 0,
       commentCount: Number(stats.commentCount) || 0,
       shareCount: Number(stats.shareCount) || 0,
+      viewCount: Number(stats.viewCount) || 0,
       comments: result.comments || this.data.comments
     })
   },
@@ -407,6 +702,15 @@ Page({
       this.applyInteractionStats(result)
     }).catch(error => {
       console.warn('读取赛事互动记录失败', error)
+    })
+  },
+  recordViewOpen(eventId) {
+    const viewToken = this.__viewToken
+    this.callInteraction('recordViewOpen', { eventId }).then(result => {
+      if (this.__unloaded || viewToken !== this.__viewToken) return
+      this.applyInteractionStats(result)
+    }).catch(error => {
+      console.warn('记录赛事浏览人数失败', error)
     })
   },
   recordShareOpen(source) {
@@ -489,6 +793,7 @@ Page({
         status: '已完赛',
         location: '河南省-驻马店市-遂平县 （报到地点待定）',
         sectionTitles: eventSectionTitles(),
+        infoLabels: eventInfoLabels(),
         signup: [
           '集合赛公开A组  ¥ 1/辆（已报0辆）',
           '集合赛公开B组  ¥ 1/辆（已报0辆）',
@@ -516,6 +821,7 @@ Page({
       location: '',
       signup: [],
       sectionTitles: eventSectionTitles(),
+      infoLabels: eventInfoLabels(),
       detailText: '',
       rulesText: '',
       awardsText: '',
@@ -535,7 +841,7 @@ Page({
     }
   },
   makeScoreGroups() {
-    const stages = ['SS1', 'SS2', 'SS3', 'SS4', 'SS5', 'SS6', 'SS7', 'SS8', 'SS9', '总成绩']
+    const stages = ALL_STAGES.concat(['总成绩'])
     return ['四驱组', 'N4组', '两驱组', '1.6组', 'POLO杯', '新人组', '“王者归来”组', '巾帼杯', '四驱俱乐部杯', '两驱俱乐部杯', '厂商杯', '飞车王']
       .map(name => ({ name, stages, expanded: false }))
   },

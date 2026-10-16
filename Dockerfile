@@ -9,7 +9,7 @@ WORKDIR /app
 COPY score-review-web/package.json score-review-web/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-COPY score-review-web/server.js score-review-web/cloud-store.js score-review-web/index.html ./
+COPY score-review-web/server.js score-review-web/cloud-store.js score-review-web/event-id.js score-review-web/index.html score-review-web/auto-refresh.js ./
 COPY score-review-web/event-template-cover.jpg ./event-template-cover.jpg
 COPY score-review-web/event-assets ./event-assets
 

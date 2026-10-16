@@ -1,11 +1,28 @@
 <view class="detail-page-root">
   <scroll-view class="detail-scroll" scroll-y show-scrollbar="false">
+    <view wx:if="{{eventConfigError}}" class="event-load-error">
+      <text>{{eventConfigError}}</text>
+      <button class="event-load-retry" bindtap="retryPublishedEvent">重试读取</button>
+    </view>
     <view class="detail-content">
+      <block wx:if="{{event && event.detailPageConfigured && event.detailPageHtml}}">
+        <rich-text wx:if="{{event.detailPageBeforeHtml}}" class="detail-page-rich-text" nodes="{{event.detailPageBeforeHtml}}"></rich-text>
+        <view wx:if="{{event.detailPageHasResultsAction}}" class="action-row detail-entry-actions detail-page-results-action">
+          <button class="primary-btn" bindtap="openResults">{{event.detailPageResultsLabel || event.sectionTitles.results || '查看成绩详情'}}</button>
+          <button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button>
+        </view>
+        <rich-text wx:if="{{event.detailPageAfterHtml}}" class="detail-page-rich-text" nodes="{{event.detailPageAfterHtml}}"></rich-text>
+        <view wx:if="{{!event.detailPageHasResultsAction}}" class="action-row detail-entry-actions detail-page-fallback-actions">
+          <button class="primary-btn" bindtap="openResults">{{event.sectionTitles.results || '查看成绩详情'}}</button>
+          <button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button>
+        </view>
+      </block>
+      <block wx:else>
       <view class="intro-block">
         <view class="event-title">{{event.title}}</view>
         <view class="top-meta">
           <view class="meta-item"><view class="clock-icon"></view><text>{{event.date}}</text></view>
-          <view class="meta-item views"><view class="eye-icon"></view><text>3884</text></view>
+          <view class="meta-item views"><view class="eye-icon"></view><text>{{viewCount}}</text></view>
           <text class="finish">{{event.status}}</text>
         </view>
         <view wx:if="{{event.notice}}" class="notice" bindtap="showNotice"><text>{{event.notice}}</text><text class="notice-arrow">›</text></view>
@@ -32,21 +49,21 @@
 
       <view wx:if="{{event.isGeneric}}" class="section info-section generic-event-info">
         <view class="section-title">{{event.sectionTitles.info || '赛事信息'}}</view>
-        <view wx:if="{{event.dateFull || event.date}}" class="info-line"><text class="info-label">比赛时间：</text><text>{{event.dateFull || event.date}}</text></view>
-        <view wx:if="{{event.registrationDeadline}}" class="info-line"><text class="info-label">报名截止：</text><text>{{event.registrationDeadline}}</text></view>
-        <view wx:if="{{event.location}}" class="info-line"><text class="info-label">集合地址：</text><text>{{event.location}}</text></view>
-        <view wx:if="{{event.contactName}}" class="info-line"><text class="info-label">联系人：</text><text>{{event.contactName}}</text></view>
-        <view wx:if="{{event.contactPhone}}" class="info-line"><text class="info-label">联系电话：</text><text>{{event.contactPhone}}</text></view>
-        <view wx:if="{{event.contactWechat}}" class="info-line"><text class="info-label">微信号：</text><text>{{event.contactWechat}}</text></view>
+        <view wx:if="{{event.dateFull || event.date}}" class="info-line"><text class="info-label">{{event.infoLabels.date || '比赛时间：'}}</text><text>{{event.dateFull || event.date}}</text></view>
+        <view wx:if="{{event.registrationDeadline}}" class="info-line"><text class="info-label">{{event.infoLabels.deadline || '报名截止：'}}</text><text>{{event.registrationDeadline}}</text></view>
+        <view wx:if="{{event.location}}" class="info-line"><text class="info-label">{{event.infoLabels.location || '集合地址：'}}</text><text>{{event.location}}</text></view>
+        <view wx:if="{{event.contactName}}" class="info-line"><text class="info-label">{{event.infoLabels.contactName || '联系人：'}}</text><text>{{event.contactName}}</text></view>
+        <view wx:if="{{event.contactPhone}}" class="info-line"><text class="info-label">{{event.infoLabels.phone || '联系电话：'}}</text><text>{{event.contactPhone}}</text></view>
+        <view wx:if="{{event.contactWechat}}" class="info-line"><text class="info-label">{{event.infoLabels.wechat || '微信号：'}}</text><text>{{event.contactWechat}}</text></view>
       </view>
       <view wx:else class="section info-section">
         <view class="section-title">{{event.sectionTitles.info || '赛事信息'}}</view>
-        <view class="info-line"><text class="info-label">比赛时间：</text><text>{{event.dateFull}}</text></view>
-        <view class="info-line"><text class="info-label">报名截止：</text><text>2026-08-22</text></view>
-        <view class="info-line"><text class="info-label">集合地址：</text><text>{{event.location}}</text></view>
-        <view class="info-line"><text class="info-label">联系人：</text><text>马银鹏</text></view>
-        <view class="info-line contact"><text class="info-label">联系电话：</text><text class="phone">13269191919(点击拨打)</text></view>
-        <view class="info-line"><text class="info-label">微信号：</text><text>13269191919</text></view>
+        <view class="info-line"><text class="info-label">{{event.infoLabels.date || '比赛时间：'}}</text><text>{{event.dateFull}}</text></view>
+        <view class="info-line"><text class="info-label">{{event.infoLabels.deadline || '报名截止：'}}</text><text>2026-08-22</text></view>
+        <view class="info-line"><text class="info-label">{{event.infoLabels.location || '集合地址：'}}</text><text>{{event.location}}</text></view>
+        <view class="info-line"><text class="info-label">{{event.infoLabels.contactName || '联系人：'}}</text><text>马银鹏</text></view>
+        <view class="info-line contact"><text class="info-label">{{event.infoLabels.phone || '联系电话：'}}</text><text class="phone">13269191919(点击拨打)</text></view>
+        <view class="info-line"><text class="info-label">{{event.infoLabels.wechat || '微信号：'}}</text><text>13269191919</text></view>
       </view>
 
       <view wx:if="{{event && event.isDynamic && (event.coverUrl || event.detailText || (event.contentBlocks && event.contentBlocks.length))}}" class="section generic-copy-section">
@@ -54,13 +71,16 @@
         <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
         <view wx:if="{{event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
         <block wx:if="{{event.contentBlocks && event.contentBlocks.length}}" wx:for="{{event.contentBlocks}}" wx:for-item="contentBlock" wx:key="key">
-          <view wx:if="{{contentBlock.type === 'heading'}}" class="sub-title content-block-heading">{{contentBlock.text}}</view>
-          <view wx:elif="{{contentBlock.type === 'paragraph' || contentBlock.type === 'text'}}" class="prose generic-detail-copy">{{contentBlock.text}}</view>
-          <view wx:elif="{{contentBlock.type === 'note'}}" class="prose note generic-detail-copy">{{contentBlock.text}}</view>
+          <rich-text wx:if="{{contentBlock.type === 'heading' && contentBlock.html}}" class="sub-title content-block-heading align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}" nodes="{{contentBlock.html}}"></rich-text>
+          <view wx:elif="{{contentBlock.type === 'heading'}}" class="sub-title content-block-heading align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">{{contentBlock.text}}</view>
+          <rich-text wx:elif="{{(contentBlock.type === 'paragraph' || contentBlock.type === 'text') && contentBlock.html}}" class="prose generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}" nodes="{{contentBlock.html}}"></rich-text>
+          <view wx:elif="{{contentBlock.type === 'paragraph' || contentBlock.type === 'text'}}" class="prose generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">{{contentBlock.text}}</view>
+          <rich-text wx:elif="{{contentBlock.type === 'note' && contentBlock.html}}" class="prose note generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}" nodes="{{contentBlock.html}}"></rich-text>
+          <view wx:elif="{{contentBlock.type === 'note'}}" class="prose note generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">{{contentBlock.text}}</view>
           <image wx:elif="{{contentBlock.type === 'image' && contentBlock.src}}" class="detail-poster content-block-image" src="{{contentBlock.src}}" mode="widthFix" lazy-load="true" />
           <view wx:elif="{{contentBlock.type === 'banner'}}" class="stage-banner stage-banner-{{contentBlock.theme}}"><view class="stage-brand">赛车视界<text>RACING VIEW</text></view><text class="stage-banner-title">{{contentBlock.text}}</text><text class="stage-number">{{contentBlock.number}}</text></view>
           <view wx:elif="{{contentBlock.type === 'divider'}}" class="separator content-block-divider"></view>
-          <view wx:elif="{{contentBlock.type === 'list'}}" class="content-block-list">
+          <view wx:elif="{{contentBlock.type === 'list'}}" class="content-block-list {{contentBlock.listStyle === 'ordered' ? 'content-block-list-ordered' : 'content-block-list-unordered'}} align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">
             <view wx:for="{{contentBlock.items}}" wx:for-item="listItem" wx:key="index" class="prose numbered content-block-list-item">{{listItem}}</view>
           </view>
           <view wx:elif="{{contentBlock.type === 'table'}}" class="prize-block content-block-table">
@@ -213,6 +233,7 @@
         <view class="sub-title">（五）比赛规则：详见后续公告。</view>
         <view class="prose">相关规则的补充、修正和变化，都将通过本活动组委会、或仲裁委员会决策后，按时间和编制在《赛车视界》小程序公告栏依次发布公告。补充、修正和变化后的规则与原公告内容发生冲突或改变时，一律按照最新公告所述规则执行，要求所有参加者必须熟悉相关规则并严格遵守。活动组委会拥有关于本活动所有事宜的唯一解释权！</view>
       </view>
+      </block>
     </view>
   </scroll-view>
 

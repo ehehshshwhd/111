@@ -5,6 +5,7 @@
 !score-review-web/package-lock.json
 !score-review-web/server.js
 !score-review-web/cloud-store.js
+!score-review-web/event-id.js
 !score-review-web/index.html
 !score-review-web/event-template-cover.jpg
 !score-review-web/event-assets/
