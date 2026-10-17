@@ -214,7 +214,7 @@ function normalizeContentBlocks(value) {
       fileId: String(block.fileId || '')
     }
     if (type === 'banner') {
-      normalized.theme = ['02', '03'].includes(String(block.theme)) ? String(block.theme) : '02'
+      normalized.theme = ['01', '02', '03'].includes(String(block.theme)) ? String(block.theme) : '01'
       normalized.number = String(block.number || '').slice(0, 20)
     }
     blocks.push(normalized)
@@ -883,6 +883,3 @@ Page({
     ]
   }
 })
-
-
-
