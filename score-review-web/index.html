@@ -242,19 +242,21 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .event-preview-wide .mini-preview-views::before{content:"";width:11px;height:7px;margin-right:5px;border:1px solid #999;border-radius:80% 20%;transform:rotate(-12deg);box-sizing:border-box}
 .event-preview-wide .mini-preview-content-blocks{padding:11px 0 30px;border:0}
 .event-preview-wide .mini-preview-phone{color:#516b9c}
-.event-preview-wide .mini-preview-stage-banner{height:44px;margin:19px 0 21.5px;border:1px solid #4781b7;border-radius:2.5px;display:flex;align-items:center;padding:0 9px;box-sizing:border-box;position:relative;overflow:hidden;font-size:13px}
+.event-preview-wide .mini-preview-stage-banner{height:44px;margin:19px 0 21.5px;border:1px solid #4781b7;border-radius:2.5px;display:flex;align-items:center;padding:0 9px;box-sizing:border-box;position:relative;overflow:hidden;font-size:13px;isolation:isolate}
 .event-preview-wide .mini-preview-stage-banner-01{background:#f20d0d;color:#fff}
 .event-preview-wide .mini-preview-stage-banner-02{background:#ffc313;color:#111}
 .event-preview-wide .mini-preview-stage-banner-03{background:#0879c9;color:#fff}
-.event-preview-wide .mini-preview-stage-brand{width:62px;min-width:62px;flex:none;font-size:10.5px;line-height:10.5px;font-weight:700;text-align:center;background:transparent;color:inherit;padding:0;box-sizing:border-box;border-radius:0;white-space:nowrap}
+.event-preview-wide .mini-preview-stage-brand{display:block;width:62px;min-width:62px;flex:0 0 62px;font-size:10.5px;line-height:10.5px;font-weight:700;text-align:center;background:transparent;color:inherit;padding:0;box-sizing:border-box;border-radius:0;white-space:nowrap}
 .event-preview-wide .mini-preview-stage-brand small{display:block;color:inherit;font-size:5.2px;line-height:6px;font-weight:400;letter-spacing:.1px;white-space:nowrap;text-align:center}
-.event-preview-wide .mini-preview-stage-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:6.2px}
-.event-preview-wide .mini-preview-stage-banner b{font-size:22px;font-weight:700;margin-left:auto;line-height:1}
+.event-preview-wide .mini-preview-stage-title{display:block;min-width:0;flex:1 1 auto;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-left:6.2px}
+.event-preview-wide .mini-preview-stage-banner b{display:block;flex:0 0 auto;font-size:22px;font-weight:700;margin-left:auto;line-height:1}
 /* The full editor is the source of truth. Do not add phone-only indentation or
    list metrics here: the preview receives the editor's computed styles below. */
 .article-editor-canvas ul,.article-editor-canvas ol{list-style-position:outside}
 .article-editor-canvas table{max-width:100%}
 .article-editor-canvas img{cursor:pointer}
+.article-editor-canvas .mini-preview-stage-banner{cursor:grab;user-select:none;touch-action:none}
+.article-editor-canvas .mini-preview-stage-banner:active,.article-editor-canvas .mini-preview-stage-banner.editor-dragging{cursor:grabbing;opacity:.82}
 .article-editor-preview-active .event-preview-wide .mini-preview-table-wrap{overflow-x:auto;overflow-y:hidden}
 /* Fit the phone to the available screen height and keep the long page scrollable inside it. */
 .event-preview-wide{height:100vh;height:100dvh;overflow:hidden}
@@ -1243,7 +1245,11 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       if(canvas.contains(range.commonAncestorContainer))savedEditorRange=range.cloneRange();
     }
     const editorSectionHeading=/^\s*[（(][一二三四五六七八九十百]+[）)]\s*\S/;
-    function editorNodeInside(node,root){return Boolean(node&&root&&(node===root||root.nodeType===1&&root.contains(node)||node.nodeType&&node.parentElement&&root.contains(node.parentElement)))}
+    function editorNodeInside(node,root){
+      if(!node||!root)return false;
+      const rootElement=root.nodeType===1?root:root.parentElement;
+      return Boolean(rootElement&&(rootElement===node||node.contains?.(rootElement)));
+    }
     function editorCaretAtStart(node){
       const selection=window.getSelection();
       if(!selection||!selection.rangeCount||!selection.isCollapsed||!node.contains(selection.anchorNode))return false;
@@ -1382,6 +1388,26 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
           target.style.height='auto';
           if(!target.getAttribute('alt'))target.setAttribute('alt','赛事详情图片');
         }
+      });
+      // The editor canvas may carry inline dimensions from a desktop layout.
+      // Rebuild the stage banner's flex geometry for the narrow phone viewport
+      // so the title and sequence number cannot collapse or overlap the body.
+      clone.querySelectorAll('.mini-preview-stage-banner').forEach(banner=>{
+        banner.style.display='flex';
+        banner.style.alignItems='center';
+        banner.style.width='100%';
+        banner.style.maxWidth='100%';
+        banner.style.minWidth='0';
+        banner.style.height='44px';
+        banner.style.minHeight='44px';
+        banner.style.maxHeight='44px';
+        banner.style.overflow='hidden';
+        const brand=banner.querySelector('.mini-preview-stage-brand');
+        if(brand){brand.style.display='block';brand.style.flex='0 0 62px';brand.style.width='62px';brand.style.minWidth='62px';brand.style.maxWidth='62px';brand.style.overflow='visible'}
+        const title=banner.querySelector('.mini-preview-stage-title');
+        if(title){title.style.display='block';title.style.flex='1 1 auto';title.style.minWidth='0';title.style.width='auto';title.style.maxWidth='none';title.style.overflow='hidden';title.style.whiteSpace='nowrap'}
+        const number=banner.querySelector('b');
+        if(number){number.style.display='block';number.style.flex='0 0 auto';number.style.width='auto';number.style.minWidth='0';number.style.marginLeft='auto'}
       });
       return clone.innerHTML;
     }
