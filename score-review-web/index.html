@@ -730,6 +730,18 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       // Notes are callouts; do not inherit a paragraph's first-line indent.
       node.style.textIndent='0';
     });
+    holder.querySelectorAll('.mini-preview-stage-brand').forEach(node=>{
+      // Older saved templates inlined a black logo tile. The brand is text in
+      // the editable banner; keep it on one line without adding a tile.
+      node.style.background='transparent';
+      node.style.color='inherit';
+      node.style.padding='0';
+      node.style.width='auto';
+      node.style.minWidth='62px';
+      node.style.whiteSpace='nowrap';
+      node.querySelector('small')?.style.setProperty('color','inherit');
+      node.querySelector('small')?.style.setProperty('white-space','nowrap');
+    });
     holder.querySelectorAll('img').forEach(node=>{
       const original=String(node.getAttribute('src')||'').trim();
       const mapped=webEventAssetUrl(original);
