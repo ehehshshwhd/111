@@ -394,8 +394,8 @@ Page({
         visibleGroups: Array.isArray(record.visibleGroups) ? record.visibleGroups : [],
         groupStageNames: record.groupStageNames && typeof record.groupStageNames === 'object' && !Array.isArray(record.groupStageNames) ? record.groupStageNames : {},
         stageNames: Array.isArray(record.stageNames) ? record.stageNames : [],
-        scoringType: String(record.scoringType || 'rally'),
-        rankingMode: record.rankingMode === 'total' ? 'total' : 'best',
+        scoringType: 'rally',
+        rankingMode: 'total',
         coverFileId: String(record.coverFileId || ''),
         coverUrl: String(record.coverUrl || ''),
         publishedAt: record.publishedAt || null,
@@ -458,7 +458,7 @@ Page({
         eventId: String(eventId),
         groups: groupNames,
         stageNames,
-        rankingMode: payload.rankingMode === 'total' ? 'total' : 'best',
+        rankingMode: 'total',
         rows
       }
       this.safeSetData({ scoreGroups: groups, scoreLoading: false, scoreLoadError: false })
@@ -636,7 +636,7 @@ Page({
         group: String(row.group || ''),
         rank: row.rank === undefined || row.rank === null ? '' : String(row.rank),
         stageValues,
-        validScore: this.displayScoreValue(row.validScore || (snapshot.rankingMode === 'total' ? row.totalScore : row.bestScore)),
+        validScore: this.displayScoreValue(row.validScore || (row.totalScore)),
         selectedDuration: isTotal ? '' : this.displayScoreValue(row.stageTimes && row.stageTimes[stageName] && row.stageTimes[stageName].duration)
       }
     })
@@ -647,7 +647,7 @@ Page({
         groupName: group.name,
         stageName,
         isTotal,
-        rankingMode: snapshot && snapshot.rankingMode || 'best',
+        rankingMode: 'total',
         rows: scoreRows
       }
     })

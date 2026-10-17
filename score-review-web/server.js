@@ -156,8 +156,21 @@ const server = http.createServer(async (req, res) => {
       const eventId = validateEventId(rawEventId)
       const result = cloudStore.enabled
         ? await cloudStore.getPublishedResults(eventId)
-        : (readData().publishedResults || {})[eventId] || { ok: true, eventId, publishedAt: null, rankingMode: 'best', groups: [], stageNames: [], rows: [] }
+        : (readData().publishedResults || {})[eventId] || { ok: true, eventId, publishedAt: null, rankingMode: 'total', groups: [], stageNames: [], rows: [] }
       return send(res, 200, result)
+    } catch (error) { return cloudError(res, error) }
+  }
+  // Resolve a fresh temporary URL for CloudBase cover files. Image requests
+  // do not carry the fetch credentials used by the admin API, so this asset
+  // endpoint is public like the published event cover itself.
+  if (url.pathname === '/api/event-covers' && req.method === 'GET') {
+    try {
+      if (!cloudStore.enabled) return send(res, 503, { ok: false, message: '读取封面需要连接 CloudBase 云存储' })
+      const fileId = String(url.searchParams.get('fileId') || '').trim()
+      if (!fileId || fileId.length > 500) return send(res, 400, { ok: false, message: '封面文件 ID 无效' })
+      const temporaryUrl = await cloudStore.getEventCoverTempUrl(fileId)
+      res.writeHead(302, { Location: temporaryUrl, 'Cache-Control': 'private, max-age=300' })
+      return res.end()
     } catch (error) { return cloudError(res, error) }
   }
   if (url.pathname.startsWith('/api/')) {

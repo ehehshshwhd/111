@@ -223,8 +223,10 @@ function cleanEvent(input, id) {
     visibleGroups: cleanGroupNames(source.visibleGroups),
     stageNames,
     groupStageNames: cleanGroupStageNames(source.groupStageNames, allowedStages),
-    scoringType: String(source.scoringType || 'rally').toLowerCase() === 'points' ? 'points' : 'rally',
-    rankingMode: String(source.rankingMode || 'best').toLowerCase() === 'total' ? 'total' : 'best',
+    // The current race workflow is intentionally fixed to rally timing and
+    // cumulative stage time. Keep the invariant at the storage boundary.
+    scoringType: 'rally',
+    rankingMode: 'total',
     registrationEnabled: source.registrationEnabled === true,
     workBackendEnabled: source.workBackendEnabled !== false,
     published: source.published !== false,
@@ -513,6 +515,16 @@ async function uploadEventCover({ fileName, mimeType, data }) {
   const uploaded = await cloudClient.uploadFile({ cloudPath, fileContent: file })
   const urls = await cloudClient.getTempFileURL({ fileList: [{ fileID: uploaded.fileID, maxAge: 3600 }] })
   return { coverFileId: uploaded.fileID, coverUrl: urls.fileList && urls.fileList[0] && urls.fileList[0].tempFileURL || '' }
+}
+
+async function getEventCoverTempUrl(fileId) {
+  const id = String(fileId || '').trim()
+  if (!id) throw new Error('封面文件 ID 为空')
+  getDatabase()
+  const result = await cloudClient.getTempFileURL({ fileList: [{ fileID: id, maxAge: 3600 }] })
+  const item = result && Array.isArray(result.fileList) ? result.fileList[0] : null
+  if (!item || !item.tempFileURL) throw new Error('封面文件不存在或已被删除')
+  return item.tempFileURL
 }
 
 async function uploadEventAsset({ fileName, mimeType, data }) {
@@ -1083,7 +1095,7 @@ function cleanPublishedResults(record, eventId = '') {
     ok: true,
     eventId: String(source.eventId || eventId || ''),
     publishedAt: source.publishedAt || null,
-    rankingMode: source.rankingMode === 'total' ? 'total' : 'best',
+    rankingMode: 'total',
     groups: cleanGroupNames(source.groups),
     stageNames,
     groupStageNames: cleanGroupStageNames(source.groupStageNames, stageNames.length ? stageNames : STAGES),
@@ -1140,7 +1152,7 @@ async function publishResults(eventId, visibleGroups, rankingMode, requestedGrou
   ])
   const groups = requestedGroups.filter(group => availableGroups.includes(group))
   if (!Array.isArray(visibleGroups) && !groups.length) throw new Error('请先配置本场赛事的可展示组别')
-  const mode = rankingMode === 'total' ? 'total' : 'best'
+  const mode = 'total'
   const selectedGroups = new Set(groups)
   const configuredStages = event.stageNames.length ? new Set(event.stageNames) : STAGES
   const groupStageNames = cleanGroupStageNames(sourceGroupStageNames, configuredStages)
@@ -1307,6 +1319,7 @@ module.exports = {
   listEvents,
   saveEvent,
   uploadEventCover,
+  getEventCoverTempUrl,
   uploadEventAsset,
   deleteEvent,
   listPermissions,
