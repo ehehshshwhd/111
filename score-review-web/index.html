@@ -265,6 +265,90 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .event-preview-wide .mini-preview-nav{flex:0 0 44px}
 .event-preview-wide .mini-preview-scroll{flex:1 1 auto;height:auto;min-height:0;padding-bottom:calc(38px + env(safe-area-inset-bottom, 0px));overflow-x:hidden;overflow-y:auto;overscroll-behavior-y:auto;-webkit-overflow-scrolling:touch;scroll-padding-bottom:calc(38px + env(safe-area-inset-bottom, 0px))}
 @media (max-width:760px){.event-preview-wide .event-preview-head{padding:8px 8px 0}.event-preview-wide .event-preview-actions{gap:6px;flex-wrap:wrap;justify-content:flex-end}.event-preview-wide .event-preview-live{font-size:12px;padding:6px 8px}.event-preview-wide .event-preview-body{align-items:center;padding:8px}.event-preview-wide .mini-program-preview{height:100%;max-height:812px;border-radius:34px}}
+
+/* Keep every preview block inside the phone viewport.  The source content can
+   contain long Chinese strings or wide tables, so it must be allowed to wrap
+   or scroll within the phone instead of widening and being clipped. */
+.event-preview-wide .mini-preview-scroll,
+.event-preview-wide .mini-preview-intro,
+.event-preview-wide .mini-preview-section,
+.event-preview-wide .mini-preview-content-blocks,
+.event-preview-wide .mini-preview-content-blocks > *,
+.event-preview-wide .event-detail-template,
+.event-preview-wide .event-detail-template > *{
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+.event-preview-wide .mini-preview-meta{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  column-gap:8px;
+  width:100%;
+  min-width:0;
+}
+.event-preview-wide .mini-preview-meta .mini-preview-date{
+  min-width:0;
+  margin-right:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.event-preview-wide .mini-preview-meta .mini-preview-views,
+.event-preview-wide .mini-preview-meta .mini-preview-status{
+  min-width:0;
+  margin-left:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.event-preview-wide .mini-preview-status{
+  position:static;
+  right:auto;
+  top:auto;
+  justify-self:end;
+  font-size:15px;
+}
+.event-preview-wide .mini-preview-copy,
+.event-preview-wide .mini-preview-list,
+.event-preview-wide .mini-preview-list p,
+.event-preview-wide .mini-preview-list li,
+.event-preview-wide .mini-preview-note,
+.event-preview-wide .event-detail-template,
+.event-preview-wide .event-detail-template p,
+.event-preview-wide .event-detail-template li,
+.event-preview-wide .event-detail-template blockquote{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+.event-preview-wide .mini-preview-table-wrap{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  overflow-x:auto;
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+}
+.event-preview-wide .mini-preview-table{
+  max-width:none;
+  min-width:100%;
+}
+.event-preview-wide .event-detail-template table{
+  width:100%;
+  max-width:100%;
+  table-layout:fixed;
+  overflow-wrap:anywhere;
+}
+.event-preview-wide .event-detail-template img{
+  max-width:100%;
+  height:auto;
+}
 </style>
   <style>
     .content-list-editor{display:grid;gap:8px}.content-list-editor-label{font-size:12px;font-weight:600;color:#666e77}.content-list-item-row{display:grid;grid-template-columns:28px minmax(0,1fr) 34px 34px auto;gap:6px;align-items:center}.content-list-item-index{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:#fff0db;color:#a75b00;font-size:11px;font-weight:650}.content-list-item-row input{width:100%;min-width:0;height:36px;border:1px solid #d6d9de;border-radius:7px;padding:0 9px;background:#fff;color:var(--ink);font:inherit;font-size:13px}.content-list-item-row button{height:32px;min-width:32px;padding:0 7px;border:1px solid #e1e3e7;border-radius:7px;background:#fff;color:#525a63;font:inherit;font-size:12px}.content-list-item-row button.danger{color:#c33;border-color:#f0d6d6}.content-list-add{justify-self:start;height:34px;padding:0 12px;font-size:12px}
@@ -765,6 +849,25 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
     holder.querySelectorAll('.mini-preview-note,blockquote').forEach(node=>{
       // Notes are callouts; do not inherit a paragraph's first-line indent.
       node.style.textIndent='0';
+    });
+    holder.querySelectorAll('div,p,blockquote,ul,ol,li,table,thead,tbody,tr,th,td').forEach(node=>{
+      // Keep saved editor HTML responsive when it is rendered by wx:rich-text.
+      node.style.maxWidth='100%';
+      node.style.boxSizing='border-box';
+      node.style.overflowWrap='anywhere';
+      node.style.wordBreak='break-word';
+    });
+    holder.querySelectorAll('table').forEach(node=>{
+      node.style.width='100%';
+      node.style.tableLayout='fixed';
+      node.style.borderCollapse='collapse';
+    });
+    holder.querySelectorAll('.mini-preview-table-wrap').forEach(node=>{
+      node.style.width='100%';
+      node.style.maxWidth='100%';
+      node.style.overflowX='auto';
+      node.style.overflowY='hidden';
+      node.style.webkitOverflowScrolling='touch';
     });
     holder.querySelectorAll('.mini-preview-stage-brand').forEach(node=>{
       // Older saved templates inlined a black logo tile. The brand is text in
