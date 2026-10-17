@@ -510,7 +510,12 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   function renderEventPreview(forceLegacy=false,detailHtmlOverride=null){
     const target=$('#eventPreviewScroll');if(!target)return;
     if(detailHtmlOverride!==null){target.innerHTML=`<div class="event-detail-template">${sanitizeDetailPageHtml(detailHtmlOverride)}</div>`;return;}
-    if(detailPageConfigured&&!forceLegacy){target.innerHTML=`<div class="event-detail-template">${sanitizeDetailPageHtml(detailPageHtmlDraft)}</div>`;return;}
+    if(detailPageConfigured&&!forceLegacy){
+      const normalizedDetailHtml=sanitizeDetailPageHtml(detailPageHtmlDraft);
+      const isLegacyDuplicate=String(editingEventId||'')==='suiping'&&(normalizedDetailHtml.match(/前言：/g)||[]).length>1;
+      if(!isLegacyDuplicate){target.innerHTML=`<div class="event-detail-template">${normalizedDetailHtml}</div>`;return;}
+      detailPageConfigured=false;detailPageHtmlDraft='';
+    }
     const value=id=>String($(`#${id}`)?.value||'').trim();
     const titles=normalizedSectionTitles({signup:value('eventSectionTitleSignup'),results:value('eventSectionTitleResults'),info:value('eventSectionTitleInfo'),detail:value('eventSectionTitleDetail'),rules:value('eventSectionTitleRules'),awards:value('eventSectionTitleAwards')});
     const labels=normalizedInfoLabels(infoLabelsDraft);
