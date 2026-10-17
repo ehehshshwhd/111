@@ -856,6 +856,50 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
   function normalizeEditorDetailHtml(value){
     const holder=document.createElement('div');
     holder.innerHTML=sanitizeDetailPageHtml(value);
+    // Old editor sessions could accidentally wrap a section heading in a
+    // list when Enter was pressed at the end of a list item. That left the
+    // heading with a bullet and made it behave like ordinary list text. Split
+    // those headings back out as real, editable h2 elements and discard the
+    // empty list items created by the same browser operation.
+    const sectionHeading=/^\s*[（(][一二三四五六七八九十百]+[）)]\s*\S/;
+    Array.from(holder.querySelectorAll('ul,ol')).forEach(list=>{
+      if(!list.parentNode)return;
+      const items=Array.from(list.children).filter(node=>node.tagName==='LI');
+      if(!items.length)return;
+      let changed=false;
+      let current=list.cloneNode(false);
+      const fragment=document.createDocumentFragment();
+      const flush=()=>{if(current.children.length)fragment.append(current);current=list.cloneNode(false)};
+      items.forEach(item=>{
+        const text=String(item.textContent||'').replace(/\u00a0/g,' ').trim();
+        const nested=item.querySelector(':scope > ul,:scope > ol');
+        if(!text&&!nested){changed=true;return}
+        if(!nested&&sectionHeading.test(text)){
+          changed=true;flush();
+          const heading=document.createElement('h2');
+          heading.innerHTML=item.innerHTML;
+          if(item.getAttribute('style'))heading.setAttribute('style',item.getAttribute('style'));
+          if(item.getAttribute('class'))heading.setAttribute('class',item.getAttribute('class'));
+          fragment.append(heading);
+          return;
+        }
+        current.append(item.cloneNode(true));
+      });
+      flush();
+      if(changed)list.replaceWith(fragment);
+    });
+    // Some legacy saved templates used paragraphs for section headings. Keep
+    // the heading semantics so the toolbar can edit them as headings again.
+    Array.from(holder.querySelectorAll('p')).forEach(node=>{
+      if(node.closest('li')||node.children.length) return;
+      const text=String(node.textContent||'').trim();
+      if(!sectionHeading.test(text)||text.length>120)return;
+      const heading=document.createElement('h2');
+      heading.innerHTML=node.innerHTML;
+      if(node.getAttribute('style'))heading.setAttribute('style',node.getAttribute('style'));
+      if(node.getAttribute('class'))heading.setAttribute('class',node.getAttribute('class'));
+      node.replaceWith(heading);
+    });
     const blockSelector='h1,h2,h3,h4,h5,h6,p,blockquote,ul,ol,li,div,table,th,td';
     const validAlign=new Set(['left','center','right','justify']);
     holder.querySelectorAll(blockSelector).forEach(node=>{
