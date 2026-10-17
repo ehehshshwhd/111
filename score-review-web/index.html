@@ -431,7 +431,6 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     const defaultEventContentBlocks=[
       {type:'paragraph',text:'活动总称：2026中国·嵖岈山首届汽车越野嘉年华'},
       {type:'paragraph',text:'活动主题：“赛车视界·逐鹿中原”'},
-      bundledEventImage('stage-01.jpg','/subpackages/events/assets/stage-01.jpg'),
       {type:'banner',theme:'01',text:'中国·遂平·嵖岈山 坦克汽车定向集结赛',number:'01'},
       {type:'heading',text:'（一）相关时间、地点'},
       {type:'list',items:['1、报到时间：2026年8月21日-22日','2、开幕式发车仪式时间：8月23日上午','3、比赛时间：8月23日-24日']},
@@ -506,9 +505,10 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     const hasTheme=theme=>next.some(block=>block.type==='banner'&&String(block.theme)===theme);
     const insertBeforeText=(needle,block)=>{const index=next.findIndex(item=>String(item.text||'').includes(needle));if(index>=0)next.splice(index,0,block);else next.push(block)};
      const activityThemeIndex=next.findIndex(block=>['paragraph','text','note'].includes(block.type)&&/活动主题\s*[：:]/.test(String(block.text||'')));
-     const hasStage01Image=next.some(block=>block.type==='image'&&/stage-01(?:\.jpg)?/i.test(String(block.url||block.miniUrl||'')))||(activityThemeIndex>=0&&next.some((block,index)=>index>activityThemeIndex&&block.type==='image'));
-    if(hasStage01Image){for(let index=next.length-1;index>=0;index--)if(next[index].type==='banner'&&String(next[index].theme)==='01')next.splice(index,1)}
-    else if(!hasTheme('01')){const index=next.findIndex(block=>block.type==='image'&&/stage-01(?:\.jpg)?/i.test(String(block.url||block.miniUrl||'')));next.splice(index>=0?index+1:0,0,defaults['01'])}
+     let stage01ImageIndex=next.findIndex(block=>block.type==='image'&&/stage-01(?:\.jpg)?/i.test(String(block.url||block.miniUrl||'')));
+     if(stage01ImageIndex<0&&activityThemeIndex>=0)stage01ImageIndex=next.findIndex((block,index)=>index>activityThemeIndex&&block.type==='image');
+    if(stage01ImageIndex>=0)next.splice(stage01ImageIndex,1);
+    if(!hasTheme('01')){const index=next.findIndex(block=>block.type==='paragraph'&&/活动主题\s*[：:]/.test(String(block.text||'')));next.splice(index>=0?index+1:0,0,defaults['01'])}
     if(!hasTheme('02'))insertBeforeText('（一）赛事时间',defaults['02']);
     if(!hasTheme('03'))insertBeforeText('（五）比赛规则：详见后续公告',defaults['03']);
     return normalizeContentBlocks(next);
@@ -991,17 +991,27 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
      // Uploaded stage images often use an opaque cloud URL, so the filename
      // cannot identify them. In the complete template the stage-01 image is
      // the first non-cover image after the activity theme; use that location
-     // as the fallback and remove the generated duplicate banner.
+     // as the fallback and remove that legacy image, keeping the editable
+     // banner as the single stage-01 presentation.
      const followingStageImage=activityTheme?Array.from(holder.querySelectorAll('img')).find(node=>{
        if(activityTheme.contains(node)||node.closest('.mini-preview-cover'))return false;
        return Boolean(activityTheme.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING);
      }):null;
      const stageImage=namedStageImage||followingStageImage;
-     if(stageImage)holder.querySelectorAll('.mini-preview-stage-banner-01').forEach(node=>node.remove());
-     if(stageImage&&activityTheme&&!activityTheme.contains(stageImage)){
+     if(stageImage){
        const imageBlock=['P','FIGURE'].includes(stageImage.parentElement?.tagName)?stageImage.parentElement:stageImage;
-      activityTheme.after(imageBlock);
-    }
+       imageBlock.remove();
+     }
+     const stage01Banners=Array.from(holder.querySelectorAll('.mini-preview-stage-banner')).filter(node=>
+       node.classList.contains('mini-preview-stage-banner-01')||String(node.querySelector('b')?.textContent||'').trim()==='01');
+     stage01Banners.slice(1).forEach(node=>node.remove());
+     const firstStage01=stage01Banners[0];
+     if(firstStage01){
+       firstStage01.classList.remove('mini-preview-stage-banner-01','mini-preview-stage-banner-02','mini-preview-stage-banner-03');
+       firstStage01.classList.add('mini-preview-stage-banner-01');
+       firstStage01.style.setProperty('background-color','#f20d0d','important');
+       firstStage01.style.setProperty('color','#fff','important');
+     }
     return holder.innerHTML;
   }
   function isCompleteDetailTemplate(value){
