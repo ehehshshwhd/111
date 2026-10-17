@@ -213,6 +213,16 @@ function normalizeContentBlocks(value) {
       src: url,
       fileId: String(block.fileId || '')
     }
+    const stageImageHtml = !normalized.text.trim() && ['paragraph', 'text', 'note'].includes(type)
+      ? String(block.html || '').match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']*stage-01(?:\.jpg)?(?:[?#][^"']*)?)["'][^>]*\/?>/i)
+      : null
+    if (stageImageHtml) {
+      normalized.type = 'image'
+      normalized.src = stageImageHtml[1]
+      normalized.url = stageImageHtml[1]
+      normalized.miniUrl = stageImageHtml[1]
+      normalized.html = ''
+    }
     if (type === 'banner') {
       normalized.theme = ['01', '02', '03'].includes(String(block.theme)) ? String(block.theme) : '01'
       normalized.number = String(block.number || '').slice(0, 20)
@@ -220,10 +230,29 @@ function normalizeContentBlocks(value) {
     blocks.push(normalized)
     return blocks
   }, [])
-  const hasStage01Image = normalizedBlocks.some(block => block.type === 'image' && /(?:^|\/)stage-01(?:\.jpg)?(?:[?#].*)?$/i.test(String(block.src || block.url || block.miniUrl || '')))
-  return hasStage01Image
-    ? normalizedBlocks.filter(block => !(block.type === 'banner' && block.theme === '01'))
-    : normalizedBlocks
+  const introSeen = new Set()
+  const dedupedBlocks = normalizedBlocks.filter(block => {
+    if (!['paragraph', 'text'].includes(block.type)) return true
+    const text = String(block.text || '').trim()
+    const key = /^(前言|活动总称|活动主题)\s*[：:]/.test(text) ? text : ''
+    if (!key) return true
+    if (introSeen.has(key)) return false
+    introSeen.add(key)
+    return true
+  })
+  const hasStage01Image = dedupedBlocks.some(block => block.type === 'image' && /(?:^|\/)stage-01(?:\.jpg)?(?:[?#].*)?$/i.test(String(block.src || block.url || block.miniUrl || '')))
+  const stageImage = hasStage01Image ? dedupedBlocks.find(block => block.type === 'image' && /(?:^|\/)stage-01(?:\.jpg)?(?:[?#].*)?$/i.test(String(block.src || block.url || block.miniUrl || ''))) : null
+  const withoutStage01Banner = hasStage01Image ? dedupedBlocks.filter(block => !(block.type === 'banner' && block.theme === '01')) : dedupedBlocks
+  if (stageImage) {
+    const imageIndex = withoutStage01Banner.indexOf(stageImage)
+    const themeIndex = withoutStage01Banner.findIndex(block => ['paragraph', 'text', 'note'].includes(block.type) && /活动主题\s*[：:]/.test(String(block.text || '')))
+    if (imageIndex >= 0 && themeIndex >= 0) {
+      withoutStage01Banner.splice(imageIndex, 1)
+      const nextThemeIndex = withoutStage01Banner.findIndex(block => ['paragraph', 'text', 'note'].includes(block.type) && /活动主题\s*[：:]/.test(String(block.text || '')))
+      withoutStage01Banner.splice(nextThemeIndex + 1, 0, stageImage)
+    }
+  }
+  return withoutStage01Banner
 }
 
 function normalizeSignupOptions(value) {

@@ -343,6 +343,8 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   async function cloudRequest(path,options){if(!API_BASE)throw new Error('未配置网页接口地址');const request=options||{},method=String(request.method||'GET').toUpperCase();const send=()=>fetch(API_BASE+path,{credentials:'include',...request,headers:{'Content-Type':'application/json',...(request.headers||{})}});let response=await cloudFetchWithRetry(send,method);let payload=null;try{payload=await response.json()}catch{}if(response.status===401&&path!=='/api/session'){await loginToCloud();response=await cloudFetchWithRetry(send,method);try{payload=await response.json()}catch{payload=null}}if(!response.ok||!payload||payload.ok===false){const detail=payload&&payload.message||`接口请求失败（${response.status}）`;const code=payload&&payload.diagnosticCode;if(code&&!detail.includes(code))throw new Error(`${detail}（${code}）`);throw new Error(detail)}return payload}
     const bundledEventImage=(name,miniUrl)=>({type:'image',url:`${API_BASE}/event-assets/${name}`,miniUrl});
     const defaultEventContentBlocks=[
+      {type:'paragraph',text:'活动总称：2026中国·嵖岈山首届汽车越野嘉年华'},
+      {type:'paragraph',text:'活动主题：“赛车视界·逐鹿中原”'},
       bundledEventImage('stage-01.jpg','/subpackages/events/assets/stage-01.jpg'),
       {type:'banner',theme:'01',text:'中国·遂平·嵖岈山 坦克汽车定向集结赛',number:'01'},
       {type:'heading',text:'（一）相关时间、地点'},
@@ -421,10 +423,29 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     return normalizeContentBlocks(next);
   }
   const CONTENT_BLOCK_TYPES=new Set(['heading','paragraph','text','note','image','banner','divider','list','table','link']);
+  function moveStage01AfterActivityTheme(blocks){
+    const list=Array.isArray(blocks)?blocks.slice():[];
+    const imageIndex=list.findIndex(block=>block.type==='image'&&/(?:^|\/)stage-01(?:\.jpg)?(?:[?#].*)?$/i.test(String(block.url||block.miniUrl||'')));
+    const themeIndex=list.findIndex(block=>['paragraph','text','note'].includes(block.type)&&/活动主题\s*[：:]/.test(String(block.text||'')));
+    if(imageIndex<0||themeIndex<0)return list;
+    const [image]=list.splice(imageIndex,1);const nextThemeIndex=list.findIndex(block=>['paragraph','text','note'].includes(block.type)&&/活动主题\s*[：:]/.test(String(block.text||'')));
+    list.splice(nextThemeIndex+1,0,image);return list;
+  }
+  function dedupeSuipingIntroBlocks(blocks){
+    const seen=new Set();
+    return blocks.filter(block=>{
+      if(!['paragraph','text'].includes(block.type))return true;
+      const text=String(block.text||'').trim();
+      const key=/^(前言|活动总称|活动主题)\s*[：:]/.test(text)?text:'';
+      if(!key)return true;
+      if(seen.has(key))return false;
+      seen.add(key);return true;
+    });
+  }
   function normalizeContentBlocks(value){
     if(!Array.isArray(value))throw new Error('详情内容必须是 JSON 数组。');
     if(value.length>100)throw new Error('详情内容最多支持 100 个内容块。');
-    return value.map((raw,index)=>{
+    const normalized=value.map((raw,index)=>{
       if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error(`第 ${index+1} 项不是有效的内容块。`);
       const type=String(raw.type||'').trim().toLowerCase();
       if(!CONTENT_BLOCK_TYPES.has(type))throw new Error(`第 ${index+1} 项类型无效，请使用 heading、paragraph、note、image、banner、divider、list 或 table。`);
@@ -441,8 +462,11 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
       if(type==='list'){block.items=Array.isArray(raw.items)?raw.items.map(item=>String(item??'')).filter(Boolean):text.split(/\r?\n/).map(item=>item.trim()).filter(Boolean);block.listStyle=raw.listStyle==='ordered'?'ordered':'unordered'}
       if(type==='table'){block.title=String(raw.title||'');block.headers=Array.isArray(raw.headers)?raw.headers.map(cell=>String(cell??'')):[];block.rows=Array.isArray(raw.rows)?raw.rows.filter(Array.isArray).map(row=>row.map(cell=>String(cell??''))):[]}
       if(type==='link'){block.url=String(raw.url||'').trim();block.text=String(raw.text||'');if(block.url&&!/^(https?:\/\/|mailto:|tel:)/i.test(block.url))block.url=''}
+      const stageImageHtml=type!=='image'&&['paragraph','text','note'].includes(type)&&!String(block.text||'').trim()?String(raw.html||'').match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']*stage-01(?:\.jpg)?(?:[?#][^"']*)?)["'][^>]*\/?>/i):null;
+      if(stageImageHtml){block.type='image';block.url=stageImageHtml[1];block.miniUrl=String(raw.miniUrl||'').trim()||stageImageHtml[1];block.fileId=String(raw.fileId||'').trim().slice(0,500)}
       return block;
     });
+    return moveStage01AfterActivityTheme(dedupeSuipingIntroBlocks(normalized));
   }
   const CONTENT_BLOCK_LABELS={heading:'小标题',paragraph:'正文段落',text:'普通文字',note:'提示文字',image:'图片',banner:'赛事横幅',divider:'分隔线',list:'文字列表',table:'表格',link:'超链接'};
   function createContentBlock(type){if(type==='table')return {type,title:'',headers:['列标题'],rows:[['']],align:'left',bold:false};if(type==='list')return {type,items:[''],listStyle:'unordered',align:'left',bold:false};if(type==='image')return {type,url:'',miniUrl:'',fileId:''};if(type==='banner')return {type,theme:'01',text:'',number:'01'};if(type==='link')return {type,text:'',url:'https://',align:'left',bold:false};if(type==='divider')return {type};return {type,text:'',align:'left',bold:false}}
@@ -760,6 +784,13 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       if(mapped)node.setAttribute('src',mapped);
       if(!node.getAttribute('alt'))node.setAttribute('alt','赛事详情图片');
     });
+    const stageImage=Array.from(holder.querySelectorAll('img')).find(node=>/(?:^|\/)stage-01(?:\.jpg)?(?:[?#].*)?$/i.test(String(node.getAttribute('src')||'')));
+    const activityTheme=Array.from(holder.querySelectorAll('p,div,blockquote,h1,h2,h3,h4,h5,h6')).find(node=>/活动主题\s*[：:]/.test(String(node.textContent||'')));
+    if(stageImage)holder.querySelectorAll('.mini-preview-stage-banner-01').forEach(node=>node.remove());
+    if(stageImage&&activityTheme&&!activityTheme.contains(stageImage)){
+      const imageBlock=['P','FIGURE'].includes(stageImage.parentElement?.tagName)?stageImage.parentElement:stageImage;
+      activityTheme.after(imageBlock);
+    }
     return holder.innerHTML;
   }
   function isCompleteDetailTemplate(value){

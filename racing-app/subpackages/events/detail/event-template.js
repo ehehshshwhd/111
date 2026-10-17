@@ -1,4 +1,6 @@
 const contentBlocks=[
+      {type:'paragraph',text:'活动总称：2026中国·嵖岈山首届汽车越野嘉年华'},
+      {type:'paragraph',text:'活动主题：“赛车视界·逐鹿中原”'},
       {type:'image',miniUrl:'/subpackages/events/assets/stage-01.jpg'},
       {type:'heading',text:'（一）相关时间、地点'},
       {type:'list',items:['1、报到时间：2026年8月21日-22日','2、开幕式发车仪式时间：8月23日上午','3、比赛时间：8月23日-24日']},
