@@ -959,6 +959,12 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
     function openArticleEditor(){
       sourceTitle=$('#eventTitleInput')?.value.trim()||'';titleInput.value=sourceTitle;
       detailPageHtmlDraft=normalizeEditorDetailHtml(detailPageHtmlDraft);
+      // Older saved full-page HTML predates the fixed 01/02/03 stage banners.
+      // Rebuild that one legacy shape from the migrated content blocks so the
+      // editor and phone preview show the same complete template.
+      if(String(editingEventId||'')==='suiping'&&detailPageHtmlDraft&&!detailPageHtmlDraft.includes('mini-preview-stage-banner-01')){
+        detailPageConfigured=false;detailPageHtmlDraft=buildDetailPageHtml();detailPageConfigured=Boolean(detailPageHtmlDraft);
+      }
       // Older drafts only contained the detail blocks. Rehydrate them from the
       // same complete renderer used by the phone preview so registration,
       // result button and event information are also editable in one canvas.
