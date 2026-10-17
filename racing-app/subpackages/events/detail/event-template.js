@@ -1,6 +1,5 @@
 const contentBlocks=[
       {type:'image',miniUrl:'/subpackages/events/assets/stage-01.jpg'},
-      {type:'banner',theme:'01',text:'中国·遂平·嵖岈山 坦克汽车定向集结赛',number:'01'},
       {type:'heading',text:'（一）相关时间、地点'},
       {type:'list',items:['1、报到时间：2026年8月21日-22日','2、开幕式发车仪式时间：8月23日上午','3、比赛时间：8月23日-24日']},
       {type:'heading',text:'（二）相关地点'},

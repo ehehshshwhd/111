@@ -171,7 +171,7 @@ function normalizeContentBlocks(value) {
   if (!Array.isArray(value)) return []
   if (value.length > 100) throw new Error('赛事正文超过 100 项，拒绝不完整显示')
   const supportedTypes = new Set(['heading', 'paragraph', 'text', 'note', 'image', 'banner', 'divider', 'list', 'table'])
-  return value.reduce((blocks, block, index) => {
+  const normalizedBlocks = value.reduce((blocks, block, index) => {
     if (!block || typeof block !== 'object' || Array.isArray(block)) throw new Error(`赛事正文第 ${index + 1} 项格式无效`)
     const type = String(block.type || '').trim().toLowerCase()
     if (!supportedTypes.has(type)) throw new Error(`赛事正文第 ${index + 1} 项类型不支持：${type || '空'}`)
@@ -220,6 +220,10 @@ function normalizeContentBlocks(value) {
     blocks.push(normalized)
     return blocks
   }, [])
+  const hasStage01Image = normalizedBlocks.some(block => block.type === 'image' && /(?:^|\/)stage-01(?:\.jpg)?(?:[?#].*)?$/i.test(String(block.src || block.url || block.miniUrl || '')))
+  return hasStage01Image
+    ? normalizedBlocks.filter(block => !(block.type === 'banner' && block.theme === '01'))
+    : normalizedBlocks
 }
 
 function normalizeSignupOptions(value) {

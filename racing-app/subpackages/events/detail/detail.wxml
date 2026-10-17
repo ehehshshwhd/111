@@ -119,7 +119,6 @@
         <view class="prose"><text>活动主题：“赛车视界·逐鹿中原”</text></view>
 
         <image class="stage-image" src="/subpackages/events/assets/stage-01.jpg" mode="widthFix" />
-        <view class="stage-banner stage-banner-01"><view class="stage-brand">赛车视界<text>RACING VIEW</text></view><text class="stage-banner-title">中国·遂平·嵖岈山 坦克汽车定向集结赛</text><text class="stage-number">01</text></view>
         <view class="sub-title">（一）相关时间、地点</view>
         <view class="prose numbered">1、报到时间：2026年8月21日-22日</view>
         <view class="prose numbered">2、开幕式发车仪式时间：8月23日上午</view>
