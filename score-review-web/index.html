@@ -1218,7 +1218,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
   $('#eventPreviewScroll').addEventListener('cut',event=>{const editable=event.target.closest('[contenteditable="true"]');if(!editable)return;const text=String(window.getSelection()?.toString()||'');if(text&&event.clipboardData){event.clipboardData.setData('text/plain',text);event.preventDefault();document.execCommand('delete');editable.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteByCut'}))}});
   function safeArticleInlineHtml(value){const holder=document.createElement('div');holder.innerHTML=String(value||'');const allowed=new Set(['A','B','STRONG','I','EM','U','S','BR','SPAN','P','DIV','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','UL','OL','LI','HR','TABLE','THEAD','TBODY','TR','TH','TD','IMG','FIGURE','FIGCAPTION']);holder.querySelectorAll('*').forEach(node=>{if(!allowed.has(node.tagName)){node.replaceWith(document.createTextNode(node.textContent||''));return}Array.from(node.attributes).forEach(attr=>{const name=attr.name.toLowerCase();if(name.startsWith('on'))node.removeAttribute(attr.name)});if(node.tagName==='A'){const href=String(node.getAttribute('href')||'');if(!/^(https?:|mailto:|tel:|#)/i.test(href))node.removeAttribute('href');else{node.setAttribute('target','_blank');node.setAttribute('rel','noreferrer')}}if(node.tagName==='IMG'&&!/^(https?:|data:image\/|\/)/i.test(String(node.getAttribute('src')||'')))node.remove()});return holder.innerHTML}
   (function installArticleEditor(){
-    const overlay=`<div class="article-editor-backdrop hidden" id="articleEditorBackdrop"><section class="article-editor-shell" role="dialog" aria-modal="true" aria-labelledby="articleEditorHeading"><header class="article-editor-top"><div class="article-editor-brand" id="articleEditorHeading">赛事详情编辑器</div><input class="article-editor-title" id="articleEditorTitleInput" placeholder="输入赛事标题"><div class="article-editor-top-actions"><span class="article-editor-status" id="articleEditorStatus">未保存</span><button type="button" id="articleEditorPreviewBtn" title="只查看正文预览，不保存">手机预览</button><button type="button" id="articleEditorDraftsBtn" title="查看、继续编辑或删除已保存草稿；不会保存当前编辑">草稿管理</button><button type="button" class="primary" id="articleEditorDoneBtn">保存并返回</button><button type="button" id="articleEditorCloseBtn" aria-label="关闭赛事详情编辑器">×</button></div></header><div class="article-editor-toolbar" id="articleEditorToolbar"><button type="button" data-editor-cmd="undo">撤销</button><button type="button" data-editor-cmd="redo">重做</button><span class="article-editor-sep"></span><select id="articleEditorFormat" aria-label="文字格式"><option value="p">正文</option><option value="h2">标题 2</option><option value="h3">标题 3</option><option value="h4">标题 4</option><option value="blockquote">引用</option></select><button type="button" data-editor-cmd="bold"><b>B</b></button><button type="button" data-editor-cmd="italic"><i>I</i></button><button type="button" data-editor-cmd="underline"><u>U</u></button><button type="button" data-editor-cmd="justifyLeft">左对齐</button><button type="button" data-editor-cmd="justifyCenter">居中</button><button type="button" data-editor-cmd="justifyRight">右对齐</button><button type="button" data-editor-cmd="justifyFull">两端</button><button type="button" data-editor-cmd="insertUnorderedList">• 列表</button><button type="button" data-editor-cmd="insertOrderedList">1. 列表</button><button type="button" data-editor-cmd="foreColor" data-editor-value="#e85d2a">文字色</button><button type="button" data-editor-cmd="hiliteColor" data-editor-value="#fff0c2">背景色</button><button type="button" data-editor-cmd="formatBlock" data-editor-value="blockquote">引用</button><button type="button" data-editor-cmd="insertHorizontalRule">横线</button><button type="button" id="articleEditorLinkBtn">链接</button><button type="button" id="articleEditorImageBtn">图片</button><button type="button" id="articleEditorTableBtn">表格</button><button type="button" id="articleEditorTemplateBtn">模板</button><button type="button" id="articleEditorFullBtn">全屏</button><input type="file" id="articleEditorImageInput" accept="image/*" hidden></div><main class="article-editor-main"><aside class="article-editor-side"><h3>赛事详情模板</h3><div class="article-editor-template" id="articleEditorTemplateList"><button type="button" data-template="event-detail">完整赛事详情模板</button><button type="button" data-template="notice">赛事公告</button><button type="button" data-template="schedule">赛程说明</button><button type="button" data-template="rules">竞赛规则</button><button type="button" data-template="award">奖项设置</button></div><p class="article-editor-help">赛事标题、报名、赛事信息、图片、正文、规则与奖项会按完整详情页载入。可以自由编辑文字、图片、表格、链接和排版，并通过手机预览检查。</p></aside><div class="article-editor-canvas-wrap"><article class="article-editor-page article-editor-style-context"><h1 contenteditable="true" id="articleEditorPageTitle" data-placeholder="请输入正文标题"></h1><div class="article-editor-canvas" id="articleEditorCanvas" contenteditable="true" spellcheck="true"></div></article></div></main><footer class="article-editor-bottom"><span class="article-editor-count" id="articleEditorCount">0 字</span><button type="button" id="articleEditorSaveDraftBtn" title="将当前正文保存为本机草稿">保存草稿</button><button type="button" id="articleEditorPhoneBtn">手机预览</button><button type="button" class="primary" id="articleEditorBottomDoneBtn">保存并返回</button></footer></section><div class="article-editor-preview hidden" id="articleEditorPhonePreview"><div class="article-editor-phone"><header class="article-editor-phone-head"><span>赛事详情</span><button type="button" id="articleEditorPhoneClose">×</button></header><div class="article-editor-phone-body" id="articleEditorPhoneBody"></div></div></div></div>`;
+    const overlay=`<div class="article-editor-backdrop hidden" id="articleEditorBackdrop"><section class="article-editor-shell" role="dialog" aria-modal="true" aria-labelledby="articleEditorHeading"><header class="article-editor-top"><div class="article-editor-brand" id="articleEditorHeading">赛事详情编辑器</div><input class="article-editor-title" id="articleEditorTitleInput" placeholder="输入赛事标题"><div class="article-editor-top-actions"><span class="article-editor-status" id="articleEditorStatus">未保存</span><button type="button" id="articleEditorPreviewBtn" title="只查看正文预览，不保存">手机预览</button><button type="button" id="articleEditorDraftsBtn" title="查看、继续编辑或删除已保存草稿；不会保存当前编辑">草稿管理</button><button type="button" class="primary" id="articleEditorDoneBtn">保存并返回</button><button type="button" id="articleEditorCloseBtn" aria-label="关闭赛事详情编辑器">×</button></div></header><div class="article-editor-toolbar" id="articleEditorToolbar"><button type="button" data-editor-cmd="undo">撤销</button><button type="button" data-editor-cmd="redo">重做</button><span class="article-editor-sep"></span><select id="articleEditorFormat" aria-label="文字格式"><option value="p">正文</option><option value="h2">标题 2</option><option value="h3">标题 3</option><option value="h4">标题 4</option><option value="blockquote">引用</option></select><select id="articleEditorFontSize" aria-label="字号"><option value="">字号</option><option value="12">12 px</option><option value="14">14 px</option><option value="16">16 px</option><option value="18">18 px</option><option value="20">20 px</option><option value="24">24 px</option><option value="28">28 px</option><option value="32">32 px</option></select><button type="button" data-editor-cmd="bold"><b>B</b></button><button type="button" data-editor-cmd="italic"><i>I</i></button><button type="button" data-editor-cmd="underline"><u>U</u></button><button type="button" data-editor-cmd="justifyLeft">左对齐</button><button type="button" data-editor-cmd="justifyCenter">居中</button><button type="button" data-editor-cmd="justifyRight">右对齐</button><button type="button" data-editor-cmd="justifyFull">两端</button><button type="button" data-editor-cmd="insertUnorderedList">• 列表</button><button type="button" data-editor-cmd="insertOrderedList">1. 列表</button><button type="button" data-editor-cmd="foreColor" data-editor-value="#e85d2a">文字色</button><button type="button" data-editor-cmd="hiliteColor" data-editor-value="#fff0c2">背景色</button><button type="button" data-editor-cmd="formatBlock" data-editor-value="blockquote">引用</button><button type="button" data-editor-cmd="insertHorizontalRule">横线</button><button type="button" id="articleEditorLinkBtn">链接</button><button type="button" id="articleEditorImageBtn">图片</button><button type="button" id="articleEditorTableBtn">表格</button><button type="button" id="articleEditorTemplateBtn">模板</button><button type="button" id="articleEditorFullBtn">全屏</button><input type="file" id="articleEditorImageInput" accept="image/*" hidden></div><main class="article-editor-main"><aside class="article-editor-side"><h3>赛事详情模板</h3><div class="article-editor-template" id="articleEditorTemplateList"><button type="button" data-template="event-detail">完整赛事详情模板</button><button type="button" data-template="notice">赛事公告</button><button type="button" data-template="schedule">赛程说明</button><button type="button" data-template="rules">竞赛规则</button><button type="button" data-template="award">奖项设置</button></div><p class="article-editor-help">这里只编辑“赛事详情”正文。赛事标题、封面、报名、赛事信息、赛段横幅、规则与奖项由赛事表单管理；图片未上传时会保持空白。可以编辑文字、字号、图片、表格、链接和排版，并通过手机预览检查。</p></aside><div class="article-editor-canvas-wrap"><article class="article-editor-page article-editor-style-context"><h1 contenteditable="true" id="articleEditorPageTitle" data-placeholder="请输入正文标题"></h1><div class="article-editor-canvas" id="articleEditorCanvas" contenteditable="true" spellcheck="true"></div></article></div></main><footer class="article-editor-bottom"><span class="article-editor-count" id="articleEditorCount">0 字</span><button type="button" id="articleEditorSaveDraftBtn" title="将当前正文保存为本机草稿">保存草稿</button><button type="button" id="articleEditorPhoneBtn">手机预览</button><button type="button" class="primary" id="articleEditorBottomDoneBtn">保存并返回</button></footer></section><div class="article-editor-preview hidden" id="articleEditorPhonePreview"><div class="article-editor-phone"><header class="article-editor-phone-head"><span>赛事详情</span><button type="button" id="articleEditorPhoneClose">×</button></header><div class="article-editor-phone-body" id="articleEditorPhoneBody"></div></div></div></div>`;
     document.body.insertAdjacentHTML('beforeend',overlay);
     const legacy=$('#eventContentBlocksEditor')?.closest('.field');if(legacy)legacy.classList.add('event-content-editor-field');
     const coverField=$('#eventCoverUrlInput')?.closest('.field');if(coverField&&!$('#openArticleEditorBtn')){const field=document.createElement('div');field.className='field full article-editor-launch-field';field.innerHTML='<label>赛事详情编辑</label><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button type="button" class="primary" id="openArticleEditorBtn">打开全屏详情编辑器</button><span class="group-hint">完整赛事详情页将在全屏编辑器中自由编辑，手机预览沿用原赛事详情样式。</span></div>';coverField.parentElement.insertBefore(field,coverField)}
@@ -1292,6 +1292,30 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       Array.from(root.childNodes).forEach(node=>visit(node,false));
       return result;
     }
+    // The event form owns the cover, title, registration, info and stage
+    // metadata.  The full preview renderer still produces those sections, but
+    // the article editor should expose only the editable body under “赛事详情”.
+    // Keeping this extraction in one place also makes old full-page drafts safe
+    // to reopen without bringing fixed metadata back into the正文 canvas.
+    function extractDetailBodyHtml(value){
+      const holder=document.createElement('div');
+      holder.innerHTML=cleanHtml(value||'');
+      const section=holder.querySelector('.mini-preview-detail-section');
+      if(!section)return cleanHtml(value||'');
+      const body=section.cloneNode(true);
+      body.querySelector('.mini-preview-section-title,.mini-preview-editable[data-preview-field="eventSectionTitleDetail"]')?.remove();
+      const firstHeading=Array.from(body.children).find(node=>/^H[1-6]$/.test(node.tagName));
+      if(firstHeading)firstHeading.remove();
+      // Cover images are rendered by the event form at the top of the page.
+      // Remove only that wrapper; images inside content blocks stay in place.
+      body.querySelectorAll('.mini-preview-image-edit').forEach(wrapper=>{
+        if(wrapper.querySelector('.mini-preview-cover'))wrapper.remove();
+      });
+      body.querySelectorAll('[contenteditable],[data-preview-field],[data-preview-placeholder],[data-preview-block-index],[data-preview-block-key],[data-preview-replace-block],[data-preview-replace-cover]').forEach(node=>{
+        ['contenteditable','spellcheck','data-preview-field','data-preview-placeholder','data-preview-block-index','data-preview-block-key','data-preview-replace-block','data-preview-replace-cover'].forEach(attribute=>node.removeAttribute(attribute));
+      });
+      return cleanHtml(body.innerHTML);
+    }
     function remember(){const snap=canvas.innerHTML+'\n'+pageTitle.innerHTML;if(history[historyIndex]===snap)return;history=history.slice(0,historyIndex+1);history.push(snap);if(history.length>40)history.shift();historyIndex=history.length-1}
     function restore(index){const snap=history[index];if(!snap)return;const pos=snap.indexOf('\n');pageTitle.innerHTML=pos<0?snap:snap.slice(0,pos);canvas.innerHTML=pos<0?'':snap.slice(pos+1);const title=detailPageConfigured?(canvas.querySelector('.event-template-title')?.textContent.trim()||''):pageTitle.textContent.trim();if(title)titleInput.value=title;historyIndex=index;updateCount()}
     function updateCount(){const count=(pageTitle.textContent+' '+canvas.textContent).trim().length;$('#articleEditorCount').textContent=`${count} 字`;status.textContent='已编辑';}
@@ -1326,25 +1350,27 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
        renderEventPreviews();status.textContent='已同步到赛事编辑表单';if(close)closeArticleEditor()
      }
      function saveArticleDraftLocally(){saveToForm(false);const list=loadArticleDrafts();const title=canvas.querySelector('.event-template-title')?.textContent.trim()||pageTitle.textContent.trim()||titleInput.value.trim();const record={id:(window.crypto&&crypto.randomUUID?crypto.randomUUID():`draft-${Date.now()}-${Math.random().toString(36).slice(2)}`),eventId:String(editingEventId||$('#eventSelect')?.value||''),title,html:normalizeEditorDetailHtml(canvas.innerHTML),detailPageHtml:detailPageConfigured?detailPageHtmlDraft:'',detailPageConfigured,contentBlocks:detailPageConfigured?[]:htmlToBlocks(),savedAt:new Date().toISOString()};list.unshift(record);try{localStorage.setItem(ARTICLE_DRAFTS_KEY,JSON.stringify(list.slice(0,50)));status.textContent='正文草稿已保存到本机；打开“草稿管理”即可选择'}catch{status.textContent='正文已同步到赛事表单，但本机草稿保存失败'}updateCount()}
-     window.restoreArticleDraft=record=>{if(!record)return;detailPageHtmlDraft=normalizeEditorDetailHtml(record.detailPageHtml||'');detailPageConfigured=record.detailPageConfigured===true||Boolean(detailPageHtmlDraft);contentBlocksDraft=Array.isArray(record.contentBlocks)?normalizeContentBlocks(record.contentBlocks):contentBlocksDraft;titleInput.value=String(record.title||'');pageTitle.textContent=detailPageConfigured?'':String(record.title||'');canvas.innerHTML=detailPageConfigured?detailPageHtmlDraft:sanitizeDetailPageHtml(record.html||blocksToHtml());repairEditorListStructure();enableEditorBlockDragging();if(detailPageConfigured){const title=canvas.querySelector('.event-template-title')?.textContent.trim();if(title)titleInput.value=title}history=[];historyIndex=-1;remember();updateCount();status.textContent='已恢复本机正文草稿';backdrop.classList.remove('hidden');setTimeout(()=>canvas.focus(),0)};
+     window.restoreArticleDraft=record=>{if(!record)return;const savedFullHtml=normalizeEditorDetailHtml(record.detailPageHtml||'');const savedBodyHtml=record.detailPageConfigured?extractDetailBodyHtml(savedFullHtml):extractDetailBodyHtml(record.html||'');detailPageHtmlDraft='';detailPageConfigured=false;contentBlocksDraft=Array.isArray(record.contentBlocks)?normalizeContentBlocks(record.contentBlocks):contentBlocksDraft;titleInput.value=String(record.title||'');pageTitle.textContent='';canvas.innerHTML=savedBodyHtml||blocksToHtml();repairEditorListStructure();enableEditorBlockDragging();history=[];historyIndex=-1;remember();updateCount();status.textContent='已恢复本机正文草稿';backdrop.classList.remove('hidden');setTimeout(()=>canvas.focus(),0)};
     function openArticleEditor(){
       sourceTitle=$('#eventTitleInput')?.value.trim()||'';titleInput.value=sourceTitle;
       detailPageHtmlDraft=normalizeEditorDetailHtml(detailPageHtmlDraft);
-      // Older saved full-page HTML predates the fixed 01/02/03 stage banners.
-      // Rebuild that one legacy shape from the migrated content blocks so the
-      // editor and phone preview show the same complete template.
+      // Migrate legacy full-page HTML to the current renderer before extracting
+      // the body. This keeps old banners and content blocks available without
+      // exposing the fixed event metadata in the editor.
       if(String(editingEventId||'')==='suiping'&&detailPageHtmlDraft&&(!detailPageHtmlDraft.includes('mini-preview-stage-banner-01')||(detailPageHtmlDraft.match(/前言：/g)||[]).length>1)){
         detailPageConfigured=false;detailPageHtmlDraft=buildDetailPageHtml();detailPageConfigured=Boolean(detailPageHtmlDraft);
       }
-      // Older drafts only contained the detail blocks. Rehydrate them from the
-      // same complete renderer used by the phone preview so registration,
-      // result button and event information are also editable in one canvas.
       if(!isCompleteDetailTemplate(detailPageHtmlDraft)){
         detailPageHtmlDraft=buildDetailPageHtml();
         detailPageConfigured=Boolean(detailPageHtmlDraft);
       }
-      pageTitle.textContent='';canvas.innerHTML=detailPageConfigured?detailPageHtmlDraft:blocksToHtml();repairEditorListStructure();enableEditorBlockDragging();
-      history=[];historyIndex=-1;remember();updateCount();status.textContent=detailPageConfigured?'已加载完整赛事详情模板':'已加载赛事正文';backdrop.classList.remove('hidden');setTimeout(()=>canvas.focus(),0)
+      const bodyHtml=extractDetailBodyHtml(detailPageHtmlDraft||buildDetailPageHtml());
+      detailPageHtmlDraft='';
+      detailPageConfigured=false;
+      pageTitle.textContent='';
+      canvas.innerHTML=bodyHtml||blocksToHtml();
+      repairEditorListStructure();enableEditorBlockDragging();
+      history=[];historyIndex=-1;remember();updateCount();status.textContent='已加载赛事详情正文';backdrop.classList.remove('hidden');setTimeout(()=>canvas.focus(),0)
     }
     function closeArticleEditor(){backdrop.classList.add('hidden');phonePreview.classList.add('hidden')}
     function rememberEditorSelection(){
@@ -1466,6 +1492,22 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       remember();
       updateCount();
     }
+    function applyEditorFontSize(size){
+      const pixels=Number(size);
+      if(!Number.isFinite(pixels)||pixels<=0)return;
+      restoreEditorSelection();
+      canvas.focus({preventScroll:true});
+      document.execCommand('fontSize',false,'7');
+      canvas.querySelectorAll('font[size="7"]').forEach(node=>{
+        const span=document.createElement('span');
+        span.style.fontSize=`${pixels}px`;
+        span.innerHTML=node.innerHTML;
+        node.replaceWith(span);
+      });
+      rememberEditorSelection();
+      remember();
+      updateCount();
+    }
     // Copy the actual editor layout into the preview. The phone container may
     // have its own defaults, so inline the properties that affect wrapping,
     // indentation, lists, tables and images before rendering it.
@@ -1546,7 +1588,20 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
         const number=banner.querySelector('b');
         if(number){number.style.display='block';number.style.flex='0 0 auto';number.style.width='auto';number.style.minWidth='0';number.style.marginLeft='auto';number.style.color='#fff'}
       });
-      return clone.innerHTML;
+      // Preview the complete event page, while replacing only the body below
+      // “赛事详情” with the current editor content. Fixed metadata and the
+      // uploaded cover remain owned by the event form and keep their position.
+      const bodyHtml=clone.innerHTML;
+      const full=document.createElement('div');
+      full.innerHTML=buildDetailPageHtml();
+      const detail=full.querySelector('.mini-preview-detail-section');
+      if(detail){
+        const heading=Array.from(detail.children).find(node=>/^H[1-6]$/.test(node.tagName));
+        const cover=detail.querySelector('.mini-preview-cover')?.closest('.mini-preview-image-edit');
+        Array.from(detail.children).forEach(child=>{if(child!==heading&&child!==cover)child.remove()});
+        if(bodyHtml.trim())detail.insertAdjacentHTML('beforeend',bodyHtml);
+      }
+      return full.innerHTML;
     }
     function showPhone(){
       const preview=$('#eventPreviewBackdrop'),toggle=$('#togglePreviewEdit'),panel=$('#eventPreviewBackdrop .event-preview-panel');
@@ -1556,8 +1611,8 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       renderEventPreview(false,editorHtmlForPreview());
       preview.classList.add('article-editor-preview-active');preview.classList.remove('hidden');
     }
-    function insertTemplate(name){if(name==='event-detail'){if(canvas.textContent.trim()&&!confirm('将用完整赛事详情模板替换当前正文，继续吗？'))return;detailPageHtmlDraft=buildDetailPageHtml();detailPageConfigured=Boolean(detailPageHtmlDraft);pageTitle.textContent='';canvas.innerHTML=detailPageHtmlDraft;remember();updateCount();return}const templates={notice:'<h2>赛事公告</h2><p>请填写赛事公告内容。</p>',schedule:'<h2>赛程说明</h2><p>请填写比赛时间、集合地点和赛段安排。</p>',rules:'<h2>竞赛规则</h2><ol><li>请填写比赛规则。</li><li>请填写计时和罚时说明。</li></ol>',award:'<h2>奖项设置</h2><table><thead><tr><th>组别</th><th>奖项</th><th>奖励</th></tr></thead><tbody><tr><td>公开组</td><td>冠军</td><td>待填写</td></tr></tbody></table>'};canvas.focus();document.execCommand('insertHTML',false,templates[name]||'');remember();updateCount()}
-     $('#openArticleEditorBtn').onclick=openArticleEditor;$('#articleEditorCloseBtn').onclick=()=>{if(confirm('正文还有未保存到赛事表单的修改，确定关闭吗？'))closeArticleEditor()};$('#articleEditorDoneBtn').onclick=()=>saveToForm(true);$('#articleEditorBottomDoneBtn').onclick=()=>saveToForm(true);$('#articleEditorSaveDraftBtn').onclick=saveArticleDraftLocally;$('#articleEditorPreviewBtn').onclick=showPhone;$('#articleEditorDraftsBtn').onclick=()=>openDraftManager();$('#articleEditorPhoneBtn').onclick=showPhone;$('#articleEditorPhoneClose').onclick=()=>phonePreview.classList.add('hidden');$('#articleEditorFormat').onchange=e=>exec('formatBlock',e.target.value);
+    function insertTemplate(name){if(name==='event-detail'){if(canvas.textContent.trim()&&!confirm('将用赛事详情模板替换当前正文，继续吗？'))return;const fullHtml=buildDetailPageHtml();detailPageHtmlDraft='';detailPageConfigured=false;pageTitle.textContent='';canvas.innerHTML=extractDetailBodyHtml(fullHtml)||blocksToHtml();repairEditorListStructure();remember();updateCount();return}const templates={notice:'<h2>赛事公告</h2><p>请填写赛事公告内容。</p>',schedule:'<h2>赛程说明</h2><p>请填写比赛时间、集合地点和赛段安排。</p>',rules:'<h2>竞赛规则</h2><ol><li>请填写比赛规则。</li><li>请填写计时和罚时说明。</li></ol>',award:'<h2>奖项设置</h2><table><thead><tr><th>组别</th><th>奖项</th><th>奖励</th></tr></thead><tbody><tr><td>公开组</td><td>冠军</td><td>待填写</td></tr></tbody></table>'};canvas.focus();document.execCommand('insertHTML',false,templates[name]||'');remember();updateCount()}
+     $('#openArticleEditorBtn').onclick=openArticleEditor;$('#articleEditorCloseBtn').onclick=()=>{if(confirm('正文还有未保存到赛事表单的修改，确定关闭吗？'))closeArticleEditor()};$('#articleEditorDoneBtn').onclick=()=>saveToForm(true);$('#articleEditorBottomDoneBtn').onclick=()=>saveToForm(true);$('#articleEditorSaveDraftBtn').onclick=saveArticleDraftLocally;$('#articleEditorPreviewBtn').onclick=showPhone;$('#articleEditorDraftsBtn').onclick=()=>openDraftManager();$('#articleEditorPhoneBtn').onclick=showPhone;$('#articleEditorPhoneClose').onclick=()=>phonePreview.classList.add('hidden');$('#articleEditorFormat').onchange=e=>exec('formatBlock',e.target.value);$('#articleEditorFontSize').onchange=e=>{applyEditorFontSize(e.target.value);e.target.value=''};
     $('#articleEditorToolbar').addEventListener('click',event=>{const button=event.target.closest('[data-editor-cmd]');if(button){exec(button.dataset.editorCmd,button.dataset.editorValue||null);return}if(event.target.closest('#articleEditorLinkBtn')){const url=prompt('请输入链接地址（需以 http://、https://、mailto: 或 tel: 开头）','https://');if(url&&/^(https?:|mailto:|tel:)/i.test(url))exec('createLink',url);return}if(event.target.closest('#articleEditorTableBtn')){exec('insertHTML','<table><thead><tr><th>表头 1</th><th>表头 2</th></tr></thead><tbody><tr><td>内容</td><td>内容</td></tr></tbody></table><p><br></p>');return}if(event.target.closest('#articleEditorImageBtn')){$('#articleEditorImageInput').click();return}if(event.target.closest('#articleEditorTemplateBtn')){$('#articleEditorTemplateList')?.scrollIntoView({behavior:'smooth'});return}if(event.target.closest('#articleEditorFullBtn')){backdrop.classList.toggle('article-editor-browser-fullscreen');if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.()}});$('#articleEditorTemplateList').addEventListener('click',event=>{const button=event.target.closest('[data-template]');if(button)insertTemplate(button.dataset.template)});
     $('#articleEditorImageInput').onchange=async event=>{
       const file=event.target.files?.[0];if(!file)return;
