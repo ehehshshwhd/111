@@ -863,7 +863,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
   }
   function sanitizeDetailPageHtml(value){
     const holder=document.createElement('div');holder.innerHTML=String(value||'');
-    const allowed=new Set(['A','B','STRONG','I','EM','U','S','BR','SPAN','P','DIV','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','UL','OL','LI','HR','TABLE','THEAD','TBODY','TR','TH','TD','IMG','FIGURE','FIGCAPTION']);
+    const allowed=new Set(['A','B','STRONG','I','EM','U','S','BR','SPAN','SMALL','P','DIV','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','UL','OL','LI','HR','TABLE','THEAD','TBODY','TR','TH','TD','IMG','FIGURE','FIGCAPTION']);
     holder.querySelectorAll('*').forEach(node=>{
       if(!allowed.has(node.tagName)){node.replaceWith(document.createTextNode(node.textContent||''));return}
       Array.from(node.attributes).forEach(attr=>{const name=attr.name.toLowerCase();if(name.startsWith('on'))node.removeAttribute(attr.name)});
@@ -877,6 +877,31 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
         if(src!==originalSrc){node.setAttribute('src',src);if(!node.getAttribute('data-mini-src'))node.setAttribute('data-mini-src',originalSrc)}
         if(!/^(https?:|data:image\/|\/)/i.test(src))node.remove();
       }else Array.from(node.attributes).forEach(attr=>{if(attr.name!=='style'&&attr.name!=='class'&&attr.name!=='data-align')node.removeAttribute(attr.name)});
+    });
+    holder.querySelectorAll('.mini-preview-stage-brand').forEach(node=>{
+      const text=String(node.textContent||'').replace(/\s+/g,' ').trim();
+      if(!node.querySelector('small')&&/赛车视界/i.test(text))node.innerHTML='赛车视界<small>RACING VIEW</small>';
+      node.style.display='flex';
+      node.style.flexDirection='column';
+      node.style.alignItems='center';
+      node.style.justifyContent='center';
+      node.style.height='22px';
+      node.style.lineHeight='11px';
+      node.style.textAlign='center';
+      node.style.textShadow='1px 1px 1px #000';
+      node.style.webkitTextStroke='.35px #000';
+      node.style.paintOrder='stroke fill';
+      const small=node.querySelector('small');
+      if(small){
+        small.style.display='block';
+        small.style.color='#fff';
+        small.style.fontSize='5.2px';
+        small.style.lineHeight='6px';
+        small.style.whiteSpace='nowrap';
+        small.style.textShadow='1px 1px 1px #000';
+        small.style.webkitTextStroke='.3px #000';
+        small.style.paintOrder='stroke fill';
+      }
     });
     return holder.innerHTML;
   }
