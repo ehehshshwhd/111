@@ -1389,6 +1389,16 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
           if(!target.getAttribute('alt'))target.setAttribute('alt','赛事详情图片');
         }
       });
+      clone.querySelectorAll('p,h1,h2,h3,h4,h5,h6,blockquote,li').forEach(node=>{
+        node.style.position='static';
+        node.style.transform='none';
+        node.style.height='auto';
+        node.style.minHeight='0';
+        node.style.maxHeight='none';
+        node.style.flex='none';
+        if(node.tagName==='LI')node.style.display='list-item';
+        else node.style.display='block';
+      });
       // The editor canvas may carry inline dimensions from a desktop layout.
       // Rebuild the stage banner's flex geometry for the narrow phone viewport
       // so the title and sequence number cannot collapse or overlap the body.
