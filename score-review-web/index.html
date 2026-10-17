@@ -396,6 +396,21 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   let infoLabelsDraft={...defaultInfoLabels};
   function normalizedInfoLabels(value){const source=value&&typeof value==='object'&&!Array.isArray(value)?value:{};return {...Object.fromEntries(Object.entries(source).filter(([key])=>!Object.prototype.hasOwnProperty.call(defaultInfoLabels,key))),...Object.fromEntries(Object.entries(defaultInfoLabels).map(([key,fallback])=>[key,String(source[key]??fallback).trim().slice(0,40)||fallback]))}}
   function normalizedSectionTitles(value){const source=value&&typeof value==='object'&&!Array.isArray(value)?value:{};return {...Object.fromEntries(Object.entries(source).filter(([key])=>!Object.prototype.hasOwnProperty.call(defaultSectionTitles,key))),...Object.fromEntries(Object.entries(defaultSectionTitles).map(([key,fallback])=>[key,String(source[key]||fallback).trim()||fallback]))}}
+  function ensureSuipingStageBanners(blocks,isSuiping){
+    if(!isSuiping)return blocks;
+    const next=Array.isArray(blocks)?blocks.slice():[];
+    const defaults={
+      '01':{type:'banner',theme:'01',text:'中国·遂平·嵖岈山 坦克汽车定向集结赛',number:'01'},
+      '02':{type:'banner',theme:'02',text:'中国·遂平·嵖岈山 汽车场地越野职业联赛',number:'02'},
+      '03':{type:'banner',theme:'03',text:'中国·遂平·嵖岈山 汽车城市攀爬巡回赛',number:'03'}
+    };
+    const hasTheme=theme=>next.some(block=>block.type==='banner'&&String(block.theme)===theme);
+    const insertBeforeText=(needle,block)=>{const index=next.findIndex(item=>String(item.text||'').includes(needle));if(index>=0)next.splice(index,0,block);else next.push(block)};
+    if(!hasTheme('01')){const index=next.findIndex(block=>block.type==='image'&&/stage-01(?:\.jpg)?/i.test(String(block.url||block.miniUrl||'')));next.splice(index>=0?index+1:0,0,defaults['01'])}
+    if(!hasTheme('02'))insertBeforeText('（一）赛事时间',defaults['02']);
+    if(!hasTheme('03'))insertBeforeText('（五）比赛规则：详见后续公告',defaults['03']);
+    return normalizeContentBlocks(next);
+  }
   const CONTENT_BLOCK_TYPES=new Set(['heading','paragraph','text','note','image','banner','divider','list','table','link']);
   function normalizeContentBlocks(value){
     if(!Array.isArray(value))throw new Error('详情内容必须是 JSON 数组。');
@@ -569,7 +584,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     $('#eventStatusInput').value=source.status||fallback.status||'报名中';
     $('#eventNoticeInput').value=source.notice||fallback.notice||'';
     const hasExplicitBlocks=source.contentBlocksConfigured===true||(source.contentBlocksConfigured!==false&&Array.isArray(source.contentBlocks));
-    const blocks=normalizeContentBlocks(hasExplicitBlocks?(Array.isArray(source.contentBlocks)?source.contentBlocks:[]):(isSuipingTemplate?defaultEventContentBlocks:[]));
+    const blocks=ensureSuipingStageBanners(normalizeContentBlocks(hasExplicitBlocks?(Array.isArray(source.contentBlocks)?source.contentBlocks:[]):(isSuipingTemplate?defaultEventContentBlocks:[])),isSuipingTemplate);
     const sectionTitles=normalizedSectionTitles(source.sectionTitles||fallback.sectionTitles);
     infoLabelsDraft=normalizedInfoLabels(source.infoLabels||fallback.infoLabels);
     const legacyDetail=source.editorDetailText!==undefined?source.editorDetailText:(source.detailText!==undefined?source.detailText:(fallback.detailText||''));
