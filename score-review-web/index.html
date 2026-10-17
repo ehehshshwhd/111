@@ -484,9 +484,13 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     const templateBlocks=Array.isArray(source.contentBlocks)&&source.contentBlocks.length
       ? normalizeContentBlocks(source.contentBlocks)
       : (String(source.id||source.templateEventId||'')==='suiping'?normalizeContentBlocks(defaultEventContentBlocks):[]);
-    const templateDetailHtml=String(source.detailPageHtml||'');
     return {
-      id:'',templateEventId:String(source.id||source.templateEventId||''),_blankEventDraft:true,title:'',date:'',dateStart:'',dateEnd:'',dateFull:'',location:'',status:'',notice:'',detailText:'',coverUrl:'',coverFileId:'',rulesText:'',awardsText:'',contentBlocks:templateBlocks,contentBlocksConfigured:true,detailPageHtml:templateDetailHtml,detailPageConfigured:Boolean(source.detailPageConfigured&&templateDetailHtml),
+      // A new event starts with the template's editable detail blocks, while
+      // the complete template document remains a template-only editing aid.
+      // Carrying the full inline-styled HTML into every blank draft made the
+      // draft payload exceed CloudBase's 60,000-character field limit and
+      // prevented the form fields from driving the phone preview.
+      id:'',templateEventId:String(source.id||source.templateEventId||''),_blankEventDraft:true,title:'',date:'',dateStart:'',dateEnd:'',dateFull:'',location:'',status:'',notice:'',detailText:'',coverUrl:'',coverFileId:'',rulesText:'',awardsText:'',contentBlocks:templateBlocks,contentBlocksConfigured:true,detailPageHtml:'',detailPageConfigured:false,
       sectionTitles:{},infoLabels:{},stageNames:Array.isArray(source.stageNames)&&source.stageNames.length?source.stageNames.slice():ALL_STAGES.slice(0,3),scoringType:'rally',rankingMode:'total',registrationEnabled:false,workBackendEnabled:true,registrationDeadline:'',contactName:'',contactPhone:'',contactWechat:'',registrationNote:'',signupOptions:[{name:'',fee:'',quota:'',note:''}]
     };
   }
@@ -663,7 +667,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
     let blocks=[],blockError='';try{blocks=previewEditMode?contentBlocksDraft:currentContentBlocks()}catch(error){blockError=error.message}
     const blocksMarkup=blocks.map((block,index)=>renderContentBlock(block,index)).join('');
     const contentMarkup=blocks.length?`<div class="mini-preview-content-blocks">${blocksMarkup}</div>`:'';
-    const detailSection=cover||detail||blocks.length||previewEditMode?`<section class="mini-preview-section mini-preview-generic-section"><h3 class="${previewEditMode?'mini-preview-editable':''}" ${previewFieldAttrs('eventSectionTitleDetail')}>${esc(titles.detail)}</h3>${coverMarkup}${detail||previewEditMode?`<div class="mini-preview-copy mini-preview-generic-copy${previewEditMode?' mini-preview-editable':''}" ${previewFieldAttrs('eventDetailInput','填写赛事详情')}>${esc(detail)}</div>`:''}${blockError?`<div class="mini-preview-note">${esc(blockError)}</div>`:contentMarkup}</section>`:'';
+     const detailSection=cover||detail||blocks.length||previewEditMode?`<section class="mini-preview-section mini-preview-generic-section mini-preview-detail-section"><h3 class="${previewEditMode?'mini-preview-editable':''}" ${previewFieldAttrs('eventSectionTitleDetail')}>${esc(titles.detail)}</h3>${coverMarkup}${detail||previewEditMode?`<div class="mini-preview-copy mini-preview-generic-copy${previewEditMode?' mini-preview-editable':''}" ${previewFieldAttrs('eventDetailInput','填写赛事详情')}>${esc(detail)}</div>`:''}${blockError?`<div class="mini-preview-note">${esc(blockError)}</div>`:contentMarkup}</section>`:'';
     const statusMarkup=previewEditMode?`<select class="mini-preview-status" data-preview-select="eventStatusInput" aria-label="赛事状态">${['报名中','即将开始','进行中','已完赛'].map(option=>`<option ${option===status?'selected':''}>${option}</option>`).join('')}</select>`:`<span class="mini-preview-status">${esc(status)}</span>`;
     const noticeMarkup=notice||previewEditMode?`<div class="mini-preview-notice"><span class="${previewEditMode?'mini-preview-editable':''}" ${previewFieldAttrs('eventNoticeInput','填写公告（留空不显示）')}>${esc(notice)}</span><span aria-hidden="true">›</span></div>`:'';
     const topDateMarkup=topDate||previewEditMode?`<span class="mini-preview-date ${previewEditMode?'mini-preview-editable':''}" ${previewFieldAttrs('eventDisplayDateInput','填写顶部日期')}>${esc(topDate)}</span>`:'';
@@ -1259,15 +1263,62 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
     function blocksToHtml(){return (Array.isArray(contentBlocksDraft)?contentBlocksDraft:[]).map(htmlForBlock).join('')}
     function nodeToBlock(node){if(node.nodeType===3){const text=node.textContent.trim();return text?{type:'paragraph',text,html:escHtml(text)}:null}if(node.nodeType!==1)return null;const tag=node.tagName.toLowerCase(),html=cleanHtml(node.innerHTML),text=node.textContent.trim(),style=String(node.getAttribute('style')||''),className=String(node.getAttribute('class')||''),dataAlign=String(node.getAttribute('data-align')||''),align=(style.match(/text-align:\s*(left|center|right|justify)/i)||[])[1]||dataAlign||((className.match(/content-align-(left|center|right|justify)/i)||[])[1])||'left';if(tag==='hr')return {type:'divider'};if(tag==='img')return {type:'image',text:'',url:node.getAttribute('src')||''};if(tag==='figure'){const img=node.querySelector('img');return img?{type:'image',text:node.textContent.trim(),url:img.getAttribute('src')||''}:null}if(/^h[1-6]$/.test(tag))return {type:'heading',text,html,align,bold:false};if(tag==='blockquote')return {type:'note',text,html,align,bold:false};if(tag==='ul'||tag==='ol')return {type:'list',items:Array.from(node.querySelectorAll(':scope > li')).map(li=>li.textContent.trim()).filter(Boolean),listStyle:tag==='ol'?'ordered':'unordered',align,bold:false};if(tag==='table'){const rows=Array.from(node.querySelectorAll('tr'));const headers=Array.from(rows.shift()?.querySelectorAll('th,td')||[]).map(cell=>cell.textContent.trim());return {type:'table',title:'',headers,rows:rows.map(row=>Array.from(row.querySelectorAll('th,td')).map(cell=>cell.textContent.trim()))}}if(['p','div','span'].includes(tag)||text)return {type:'paragraph',text,html,align,bold:false};return null}
     function htmlToBlocks(){const holder=document.createElement('div');holder.innerHTML=cleanHtml(canvas.innerHTML);return Array.from(holder.childNodes).map(nodeToBlock).filter(Boolean)}
+    function detailRootToBlocks(root){
+      const result=[];
+      const visit=(node,insideBlocks=false)=>{
+        if(!node)return;
+        if(node.nodeType===3){const text=node.textContent.trim();if(text)result.push({type:'paragraph',text,html:escHtml(text)});return}
+        if(node.nodeType!==1)return;
+        const className=String(node.getAttribute('class')||'');
+        if(node.classList.contains('mini-preview-content-blocks')){Array.from(node.childNodes).forEach(child=>visit(child,true));return}
+        if(node.classList.contains('mini-preview-stage-banner')){
+          const theme=(className.match(/mini-preview-stage-banner-(01|02|03)/)||[])[1]||'01';
+          const title=node.querySelector('.mini-preview-stage-title')?.textContent.trim()||'';
+          const number=node.querySelector('b')?.textContent.trim()||'';
+          if(title||number)result.push({type:'banner',theme,text:title,number});
+          return;
+        }
+        if(node.classList.contains('mini-preview-image-edit')){
+          const image=node.querySelector('img');
+          if(insideBlocks&&image?.getAttribute('src'))result.push({type:'image',text:'',url:image.getAttribute('src')});
+          return;
+        }
+        const tag=node.tagName.toLowerCase();
+        if(['h1','h2','h3','h4','h5','h6','blockquote','ul','ol','table','hr','p'].includes(tag)){
+          const block=nodeToBlock(node);if(block)result.push(block);return;
+        }
+        Array.from(node.childNodes).forEach(child=>visit(child,insideBlocks));
+      };
+      Array.from(root.childNodes).forEach(node=>visit(node,false));
+      return result;
+    }
     function remember(){const snap=canvas.innerHTML+'\n'+pageTitle.innerHTML;if(history[historyIndex]===snap)return;history=history.slice(0,historyIndex+1);history.push(snap);if(history.length>40)history.shift();historyIndex=history.length-1}
     function restore(index){const snap=history[index];if(!snap)return;const pos=snap.indexOf('\n');pageTitle.innerHTML=pos<0?snap:snap.slice(0,pos);canvas.innerHTML=pos<0?'':snap.slice(pos+1);const title=detailPageConfigured?(canvas.querySelector('.event-template-title')?.textContent.trim()||''):pageTitle.textContent.trim();if(title)titleInput.value=title;historyIndex=index;updateCount()}
     function updateCount(){const count=(pageTitle.textContent+' '+canvas.textContent).trim().length;$('#articleEditorCount').textContent=`${count} 字`;status.textContent='已编辑';}
      function saveToForm(close=false){
        if(detailPageConfigured){
-         detailPageHtmlDraft=normalizeEditorDetailHtml(canvas.innerHTML);
-         const titleNode=canvas.querySelector('.event-template-title');
-         const title=titleNode?.textContent.trim()||pageTitle.textContent.trim();
-         if(title)$('#eventTitleInput').value=title;
+         // The full-page editor is a convenient editing surface, but the
+         // event form owns the title, dates, location, signup and other
+         // metadata. Persist only the nodes below the “赛事详情” section so
+         // those form values remain dynamic in the phone preview and the
+         // cloud draft does not contain the same page twice.
+         const detailSection=canvas.querySelector('.mini-preview-detail-section');
+         if(detailSection){
+           const body=detailSection.cloneNode(true);
+           body.querySelector('.mini-preview-section-title,.mini-preview-editable[data-preview-field="eventSectionTitleDetail"]')?.remove();
+           Array.from(body.children).find(node=>node.tagName==='H3')?.remove();
+           body.querySelectorAll('[contenteditable],[data-preview-field],[data-preview-block-index],[data-preview-replace-block],[data-preview-replace-cover]').forEach(node=>{
+             ['contenteditable','spellcheck','data-preview-field','data-preview-placeholder','data-preview-block-index','data-preview-block-key','data-preview-replace-block','data-preview-replace-cover'].forEach(attribute=>node.removeAttribute(attribute));
+           });
+           const compactStyleProperties=new Set(['color','font-size','font-weight','font-style','line-height','letter-spacing','text-align','text-decoration','text-shadow','-webkit-text-stroke','background-color','border','border-top','border-right','border-bottom','border-left','border-radius','list-style-type','list-style-position','white-space','vertical-align']);
+           body.querySelectorAll('[style]').forEach(node=>{
+             const kept=String(node.getAttribute('style')||'').split(';').map(item=>item.trim()).filter(Boolean).filter(item=>compactStyleProperties.has(item.split(':')[0].trim().toLowerCase())).join(';');
+             if(kept)node.setAttribute('style',kept);else node.removeAttribute('style');
+           });
+           contentBlocksDraft=normalizeContentBlocks(detailRootToBlocks(body));
+         }
+         detailPageHtmlDraft='';
+         detailPageConfigured=false;
        }else{
          const blocks=htmlToBlocks();contentBlocksDraft=normalizeContentBlocks(blocks);
          const title=pageTitle.textContent.trim();if(title)$('#eventTitleInput').value=title;
