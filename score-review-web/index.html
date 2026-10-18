@@ -241,8 +241,13 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .event-preview-wide .mini-preview-prize-table-wrap,.event-preview-wide .mini-preview-prize-table{min-width:0}
 .event-preview-wide .mini-preview-prize-table th{font-size:12px;padding:6px 4px;background:#fff}
 .event-preview-wide .mini-preview-prize-table td{font-size:12px;padding:5px 4px}
+.event-preview-wide .mini-preview-prize-table th,.event-preview-wide .mini-preview-prize-table td{white-space:nowrap;word-break:keep-all;overflow-wrap:normal}
+.event-preview-wide .mini-preview-prize-block[data-prize-group-count="3"] .mini-preview-prize-table{min-width:660px}
+.event-preview-wide .mini-preview-prize-block[data-prize-group-count="4"] .mini-preview-prize-table{min-width:820px}
 .article-editor-canvas .mini-preview-table-wrap,.article-editor-phone-body .mini-preview-table-wrap{width:100%;overflow-x:auto;overflow-y:hidden}
 .article-editor-canvas .mini-preview-prize-table,.article-editor-phone-body .mini-preview-prize-table{min-width:560px}
+.article-editor-canvas .mini-preview-prize-block[data-prize-group-count="3"] .mini-preview-prize-table,.article-editor-phone-body .mini-preview-prize-block[data-prize-group-count="3"] .mini-preview-prize-table{min-width:660px}
+.article-editor-canvas .mini-preview-prize-block[data-prize-group-count="4"] .mini-preview-prize-table,.article-editor-phone-body .mini-preview-prize-block[data-prize-group-count="4"] .mini-preview-prize-table{min-width:820px}
 .event-preview-wide .mini-preview-work-btn{height:29px;margin:0;border-radius:15.5px;padding:0 6px;font-size:12px;line-height:27px}
 .event-preview-wide .mini-preview-scroll{scrollbar-width:thin;scrollbar-color:rgba(100,100,100,.45) transparent}
 .event-preview-wide .mini-preview-scroll::-webkit-scrollbar{width:5px;height:5px}
@@ -372,6 +377,11 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   max-width:100%;
   table-layout:fixed;
   overflow-wrap:anywhere;
+}
+.event-preview-wide .event-detail-template .mini-preview-prize-table{
+  width:100%;
+  max-width:none;
+  table-layout:fixed;
 }
 .event-preview-wide .event-detail-template img{
   max-width:100%;
@@ -664,13 +674,17 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
       const sourceHeaders=Array.isArray(block.headers)?block.headers:[], sourceRows=Array.isArray(block.rows)?block.rows:[];
       let headers=sourceHeaders,rows=sourceRows;
       if(headers.length===3&&/奖金/.test(headers.join(''))){
-        headers=headers.flatMap(header=>[String(header||'').replace(/奖金/g,'').trim()||'名次','奖金']);
+        // The source table stores one compact "第一名：5000" cell per stage.
+        // Expand it into a real name/amount pair while retaining the complete
+        // stage label used by the reference tables (例如“排位赛奖金”).
+        headers=headers.flatMap(header=>[String(header||'').trim()||'名次','奖金']);
         rows=rows.map(row=>row.flatMap(cell=>{const value=String(cell??'').trim();const match=value.match(/^(.+?)[：:]\s*(.+)$/);if(match)return [match[1].trim(),match[2].trim()];return [value,value==='--'?'--':'']}));
       }
       const inferredTheme=/专业组/.test(block.title||'')?'orange':/公开组/.test(block.title||'')?'maroon':/UTV/.test(block.title||'')?'green':/新秀组/.test(block.title||'')?'yellow':/女子组/.test(block.title||'')?'purple':/改装组/.test(block.title||'')?'charcoal':/量产组/.test(block.title||'')?'yellow':'blue';
       const theme=String(block.theme||inferredTheme).replace(/[^a-z-]/gi,'').toLowerCase()||'blue';
       const palette={orange:{title:'#c95b0c',header:'#dedede',body:'#d6d6d6',bodyAlt:'#e2e2e2',total:'#c95b0c'},maroon:{title:'#850016',header:'#fff',body:'#fff',bodyAlt:'#fff',total:'#850016'},green:{title:'#4f842f',header:'#a8d18b',body:'#b8dca2',bodyAlt:'#a8d18b',total:'#4f842f'},yellow:{title:'#e0ad00',header:'#f5df8a',body:'#fff2bc',bodyAlt:'#f5df8a',total:'#d39e00'},purple:{title:'#704091',header:'#d8c6e6',body:'#eee5f4',bodyAlt:'#d8c6e6',total:'#704091'},charcoal:{title:'#414141',header:'#d4d4d4',body:'#e9e9e9',bodyAlt:'#d4d4d4',total:'#414141'},blue:{title:'#1886d2',header:'#eaf3fb',body:'#f2f2f2',bodyAlt:'#eaf3fb',total:'#1886d2'}}[theme]||{title:'#c95b0c',header:'#eaf3fb',body:'#f2f2f2',bodyAlt:'#eaf3fb',total:'#c95b0c'};
-      const headerColor=esc(block.headerColor||palette.header),bodyColor=esc(block.bodyColor||palette.body),totalColor=esc(block.totalColor||palette.total),tableTextColor=esc(block.textColor||'#222222');
+       const headerColor=esc(block.headerColor||palette.header),bodyColor=esc(block.bodyColor||palette.body),totalColor=esc(block.totalColor||palette.total),tableTextColor=esc(block.textColor||'#222222');
+       const alternatingRows=new Set(['orange','green','yellow','charcoal']).has(theme);
       const title=block.title||previewEditMode?`<div class="mini-preview-prize-title${editable}" style="background-color:${esc(block.titleColor||palette.title)}" ${previewEditMode?`${previewBlockAttrs(index,'title')} data-preview-placeholder="表格标题"`:''}>${esc(block.title||'')}</div>`:'';
       const renderTable=(columnStart,columnCount,groupIndex=0)=>{
         const groupHeaders=headers.slice(columnStart,columnStart+columnCount);
@@ -687,12 +701,12 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
         const groupCount=headers.length/2;
         const groupHeaders=Array.from({length:groupCount},(_,groupIndex)=>{
           const column=groupIndex*2;
-          const label=String(headers[column]||`第${groupIndex+1}组`).replace(/名次|奖金/g,'').trim()||`第${groupIndex+1}组`;
+           const label=String(headers[column]||`第${groupIndex+1}组`).replace(/名次/g,'').trim()||`第${groupIndex+1}组`;
           return `<th colspan="2" style="background-color:${headerColor};color:${tableTextColor}" class="${editable.trim()}" ${previewBlockAttrs(index,'header',`data-preview-column-index="${column}"`)}>${esc(label)}</th>`;
         }).join('');
         const body=rows.map((row,rowIndex)=>{
           const isTotal=rowIndex===rows.length-1&&row.some(cell=>/^(小计|合计)/.test(String(cell||'').trim()));
-          const rowColor=isTotal?totalColor:(theme==='green'&&rowIndex%2===1?esc(palette.bodyAlt||palette.body):bodyColor);
+           const rowColor=isTotal?totalColor:(alternatingRows&&rowIndex%2===1?esc(palette.bodyAlt||palette.body):bodyColor);
           const isPerGroupTotal=isTotal&&row.length===groupCount;
           const cells=Array.from({length:groupCount},(_,groupIndex)=>{
             const start=groupIndex*2;
@@ -709,8 +723,8 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
           }).join('');
           return `<tr${isTotal?' class="mini-preview-prize-total-row"':''}>${cells}</tr>`;
         }).join('');
-        const table=`<div class="mini-preview-table-wrap"><table class="mini-preview-table mini-preview-prize-table"><thead><tr>${groupHeaders}</tr></thead><tbody>${body}</tbody></table></div>`;
-        return title||table?`<div class="mini-preview-prize-block mini-preview-prize-${theme}" data-prize-table-grouped="true">${title}${table}</div>`:'';
+         const table=`<div class="mini-preview-table-wrap"><table class="mini-preview-table mini-preview-prize-table"><thead><tr>${groupHeaders}</tr></thead><tbody>${body}</tbody></table></div>`;
+         return title||table?`<div class="mini-preview-prize-block mini-preview-prize-${theme}" data-prize-table-grouped="true" data-prize-group-count="${groupCount}">${title}${table}</div>`:'';
       }
       const head=headers.length?`<thead><tr>${headers.map((cell,column)=>`<th style="background-color:${headerColor};color:${tableTextColor}" class="${editable.trim()}" ${previewBlockAttrs(index,'header',`data-preview-column-index="${column}"`)}>${esc(cell)}</th>`).join('')}</tr></thead>`:'';
       const body=rows.map((row,rowIndex)=>{const isTotal=rowIndex===rows.length-1&&row.some(cell=>/^(小计|合计)/.test(String(cell||'').trim()));const span=isTotal&&row.length&&headers.length%row.length===0?headers.length/row.length:1;return `<tr${isTotal?' class="mini-preview-prize-total-row"':''}>${row.map((cell,column)=>`<td style="background-color:${isTotal?totalColor:bodyColor};color:${tableTextColor}"${span>1?` colspan="${span}"`:''} class="${editable.trim()}" ${previewBlockAttrs(index,'cell',`data-preview-row-index="${rowIndex}" data-preview-column-index="${column}"`)}>${esc(cell)}</td>`).join('')}</tr>`}).join('');
@@ -720,9 +734,9 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   }
   function renderEventPreview(forceLegacy=false,detailHtmlOverride=null){
     const target=$('#eventPreviewScroll');if(!target)return;
-    if(detailHtmlOverride!==null){target.innerHTML=`<div class="event-detail-template">${sanitizeDetailPageHtml(detailHtmlOverride)}</div>`;return;}
+     if(detailHtmlOverride!==null){target.innerHTML=`<div class="event-detail-template">${normalizeEditorDetailHtml(detailHtmlOverride)}</div>`;return;}
     if(detailPageConfigured&&!forceLegacy){
-      const normalizedDetailHtml=sanitizeDetailPageHtml(detailPageHtmlDraft);
+       const normalizedDetailHtml=normalizeEditorDetailHtml(detailPageHtmlDraft);
       const isLegacyDuplicate=String(editingEventId||'')==='suiping'&&(normalizedDetailHtml.match(/前言：/g)||[]).length>1;
       if(!isLegacyDuplicate){target.innerHTML=`<div class="event-detail-template">${normalizedDetailHtml}</div>`;return;}
       detailPageConfigured=false;detailPageHtmlDraft='';
@@ -965,7 +979,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
         const src=webEventAssetUrl(webEventCoverUrl(originalSrc));
         if(src!==originalSrc){node.setAttribute('src',src);if(!node.getAttribute('data-mini-src'))node.setAttribute('data-mini-src',originalSrc)}
         if(!/^(https?:|data:image\/|\/)/i.test(src))node.remove();
-      }else Array.from(node.attributes).forEach(attr=>{const keep=attr.name==='style'||attr.name==='class'||attr.name==='data-align'||attr.name==='data-custom-banner'||attr.name==='data-prize-select'||attr.name==='data-prize-group'||attr.name==='data-prize-table-grouped'||attr.name==='aria-label'||((node.tagName==='OPTION'||node.tagName==='SELECT')&&['value','selected'].includes(attr.name));if(!keep)node.removeAttribute(attr.name)});
+      }else Array.from(node.attributes).forEach(attr=>{const name=attr.name.toLowerCase();const keep=attr.name==='style'||attr.name==='class'||attr.name==='data-align'||attr.name==='data-custom-banner'||attr.name==='data-prize-select'||attr.name==='data-prize-group'||attr.name==='data-prize-table-grouped'||attr.name==='aria-label'||((node.tagName==='OPTION'||node.tagName==='SELECT')&&['value','selected'].includes(attr.name))||((node.tagName==='TH'||node.tagName==='TD')&&['colspan','rowspan'].includes(name));if(!keep)node.removeAttribute(attr.name);else if((node.tagName==='TH'||node.tagName==='TD')&&['colspan','rowspan'].includes(name)){const span=Number.parseInt(attr.value,10);if(!Number.isInteger(span)||span<1||span>20)node.removeAttribute(attr.name);else node.setAttribute(name,String(span))}});
     });
     holder.querySelectorAll('.mini-preview-stage-brand').forEach(node=>{
       const text=String(node.textContent||'').replace(/\s+/g,' ').trim();
@@ -1009,32 +1023,66 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       const number=node.querySelector('b');
       if(number){number.style.display='block';number.style.flex='0 0 auto';number.style.marginLeft='8px';number.style.whiteSpace='nowrap'}
     });
-    return holder.innerHTML;
-  }
+     return holder.innerHTML;
+   }
   function normalizeEditorDetailHtml(value){
     const holder=document.createElement('div');
     holder.innerHTML=sanitizeDetailPageHtml(value);
-    // Convert legacy wide prize tables into the same full-width grouped table
-    // used by the current renderer.
+    // Convert every legacy prize table into one predictable grouped table.
+    // The old editor has existed in three shapes: compact stage cells such as
+    // “第一名：5000”, six/eight ordinary cells, and four headers with
+    // colspan="2".  Always read the effective colspan before rebuilding so
+    // groups C/D are never dropped from the phone preview.
+    const textOf=cell=>String(cell?.textContent||'').replace(/\s+/g,' ').trim();
+    const splitCompact=value=>{const text=textOf(value);const match=text.match(/^(.+?)[：:]\s*(.+)$/);return match?[match[1].trim(),match[2].trim()]:[text,text==='--'?'--':'']};
+    const copyStyle=(from,to)=>{const style=String(from?.getAttribute('style')||'').trim();if(style)to.setAttribute('style',style)};
     holder.querySelectorAll('table').forEach(table=>{
       if(table.closest('[data-prize-table-grouped="true"]'))return;
       const rows=Array.from(table.querySelectorAll('tr'));
       const headerRow=table.querySelector('thead tr')||rows[0];
-      const headers=headerRow?Array.from(headerRow.children):[];
-      if(headers.length<4||headers.length%2)return;
-      const tableLabel=`${table.querySelector('caption')?.textContent||''} ${headers.map(cell=>cell.textContent||'').join(' ')}`;
-      if(!/(奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名)/i.test(tableLabel))return;
+      const headerCells=headerRow?Array.from(headerRow.children):[];
+      const effectiveColumns=headerCells.reduce((sum,cell)=>sum+Math.max(1,Number(cell.getAttribute('colspan')||1)),0);
+      const tableLabel=`${textOf(table.querySelector('caption'))} ${headerCells.map(textOf).join(' ')}`;
+      const compactStages=headerCells.length===3&&/奖金|排位|预赛|决赛/i.test(tableLabel);
+      const groupedPrize=effectiveColumns>=4&&effectiveColumns%2===0&&/(奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名)/i.test(tableLabel);
+      if(!compactStages&&!groupedPrize)return;
       const bodyRows=rows.filter(row=>row!==headerRow);
+      const groupCount=compactStages?3:(headerCells.some(cell=>Number(cell.getAttribute('colspan')||1)>1)?headerCells.length:Math.floor(effectiveColumns/2));
+      const groupLabels=compactStages?headerCells.map(textOf):headerCells.length===groupCount?headerCells.map(textOf):Array.from({length:groupCount},(_,index)=>textOf(headerCells[index*2]));
       const wrapper=document.createElement('div');
       wrapper.className='mini-preview-prize-block mini-preview-prize-blue';
       wrapper.setAttribute('data-prize-table-grouped','true');
+      wrapper.setAttribute('data-prize-group-count',String(groupCount));
       const caption=table.querySelector('caption');
-      if(caption){const title=document.createElement('div');title.className='mini-preview-prize-title';title.innerHTML=caption.innerHTML;title.setAttribute('style',caption.getAttribute('style')||'');wrapper.append(title)}
-      const groupCount=headers.length/2;
+      const fallbackTitle=String(table.getAttribute('data-prize-title')||'奖金设置').trim();
+      if(caption||fallbackTitle){const title=document.createElement('div');title.className='mini-preview-prize-title';title.innerHTML=caption?caption.innerHTML:esc(fallbackTitle);copyStyle(caption,title);wrapper.append(title)}
       const nextTable=document.createElement('table');nextTable.className='mini-preview-table mini-preview-prize-table';
-      const thead=document.createElement('thead');const nextHead=document.createElement('tr');for(let groupIndex=0;groupIndex<groupCount;groupIndex++){const cell=document.createElement('th');cell.colSpan=2;cell.textContent=String(headers[groupIndex*2]?.textContent||`第${groupIndex+1}组`).replace(/名次|奖金/g,'').trim()||`第${groupIndex+1}组`;nextHead.append(cell)}thead.append(nextHead);nextTable.append(thead);
-      const tbody=document.createElement('tbody');bodyRows.forEach(sourceRow=>{const sourceCells=Array.from(sourceRow.children);const nextRow=document.createElement('tr');const isTotal=sourceRow===bodyRows[bodyRows.length-1]&&sourceCells.some(cell=>/^(小计|合计)/.test(String(cell.textContent||'').trim()));if(isTotal)nextRow.className='mini-preview-prize-total-row';const isPerGroupTotal=isTotal&&sourceCells.length===groupCount;for(let groupIndex=0;groupIndex<groupCount;groupIndex++){const start=groupIndex*2;if(isPerGroupTotal){const cell=document.createElement('td');cell.colSpan=2;cell.textContent=sourceCells[groupIndex]?.textContent||'';nextRow.append(cell);continue}const pair=[start,start+1].map(column=>sourceCells[column]);if(isTotal&&pair.length===2&&/^(小计|合计)/.test(String(pair[0]?.textContent||'').trim())){const cell=document.createElement('td');cell.colSpan=2;cell.textContent=`${pair[0].textContent}：${pair[1].textContent}`;nextRow.append(cell);continue}pair.forEach(sourceCell=>{const cell=document.createElement('td');cell.textContent=sourceCell?.textContent||'';nextRow.append(cell)})}tbody.append(nextRow)});nextTable.append(tbody);const wrap=document.createElement('div');wrap.className='mini-preview-table-wrap';wrap.append(nextTable);wrapper.append(wrap);
-      table.replaceWith(wrapper);
+      const thead=document.createElement('thead');const nextHead=document.createElement('tr');
+      for(let groupIndex=0;groupIndex<groupCount;groupIndex++){const cell=document.createElement('th');cell.colSpan=2;cell.textContent=(String(groupLabels[groupIndex]||`第${groupIndex+1}组`).replace(/名次/g,'').trim()||`第${groupIndex+1}组`);copyStyle(headerCells[Math.min(groupIndex,headerCells.length-1)],cell);nextHead.append(cell)}
+      thead.append(nextHead);nextTable.append(thead);
+      const tbody=document.createElement('tbody');
+      bodyRows.forEach((sourceRow,rowIndex)=>{
+        const sourceCells=Array.from(sourceRow.children);const nextRow=document.createElement('tr');
+        const isTotal=rowIndex===bodyRows.length-1&&sourceCells.some(cell=>/^(小计|合计)/.test(textOf(cell)));
+        if(isTotal)nextRow.className='mini-preview-prize-total-row';
+        const perGroupTotals=isTotal&&sourceCells.length===groupCount;
+        for(let groupIndex=0;groupIndex<groupCount;groupIndex++){
+          const start=groupIndex*2;
+          if(isTotal){
+            const cell=document.createElement('td');cell.colSpan=2;
+            if(perGroupTotals)cell.textContent=textOf(sourceCells[groupIndex]);
+            else {const first=sourceCells[start],second=sourceCells[start+1];const left=textOf(first),right=textOf(second);cell.textContent=left&&right?`${left}：${right}`:(left||right)}
+            copyStyle(sourceCells[perGroupTotals?groupIndex:start],cell);nextRow.append(cell);continue;
+          }
+          let pair=[];
+          if(compactStages||sourceCells.length===groupCount)pair=splitCompact(sourceCells[groupIndex]);
+          else pair=[textOf(sourceCells[start]),textOf(sourceCells[start+1])];
+          pair=[pair[0]||'',pair[1]||''];
+          pair.forEach((value,offset)=>{const cell=document.createElement('td');cell.textContent=value;copyStyle(sourceCells[compactStages||sourceCells.length===groupCount?groupIndex:start+offset],cell);nextRow.append(cell)})
+        }
+        tbody.append(nextRow);
+      });
+      nextTable.append(tbody);const wrap=document.createElement('div');wrap.className='mini-preview-table-wrap';wrap.append(nextTable);wrapper.append(wrap);table.replaceWith(wrapper);
     });
     // Upgrade grouped tables produced by the previous selector version.
     holder.querySelectorAll('[data-prize-table-grouped="true"]').forEach(wrapper=>{
@@ -1047,7 +1095,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       const thead=document.createElement('thead');thead.append(headRow);nextTable.append(thead);
       const rowSets=tables.map(table=>Array.from(table.querySelectorAll('tbody tr'))),rowCount=Math.max(0,...rowSets.map(rows=>rows.length));
       const tbody=document.createElement('tbody');for(let rowIndex=0;rowIndex<rowCount;rowIndex++){const row=document.createElement('tr');const total=rowSets.some(rows=>rows[rowIndex]?.classList.contains('mini-preview-prize-total-row'));if(total)row.className='mini-preview-prize-total-row';rowSets.forEach(rows=>{const sourceCells=Array.from(rows[rowIndex]?.children||[]);if(total&&sourceCells.length===1){const cell=document.createElement('td');cell.colSpan=2;cell.textContent=sourceCells[0].textContent;row.append(cell)}else{sourceCells.slice(0,2).forEach(sourceCell=>{const cell=document.createElement('td');cell.textContent=sourceCell.textContent;row.append(cell)})}});tbody.append(row)}nextTable.append(tbody);
-      const wrap=document.createElement('div');wrap.className='mini-preview-table-wrap';wrap.append(nextTable);Array.from(wrapper.querySelectorAll(':scope > .mini-preview-prize-group,.mini-preview-prize-selector')).forEach(node=>node.remove());wrapper.append(wrap);
+      wrapper.setAttribute('data-prize-group-count',String(tables.length));const wrap=document.createElement('div');wrap.className='mini-preview-table-wrap';wrap.append(nextTable);Array.from(wrapper.querySelectorAll(':scope > .mini-preview-prize-group,.mini-preview-prize-selector')).forEach(node=>node.remove());wrapper.append(wrap);
     });
     // Old editor sessions could accidentally wrap a section heading in a
     // list when Enter was pressed at the end of a list item. That left the
@@ -1128,6 +1176,15 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       node.style.overflowX='auto';
       node.style.overflowY='hidden';
       node.style.webkitOverflowScrolling='touch';
+    });
+    holder.querySelectorAll('.mini-preview-prize-block[data-prize-group-count]').forEach(block=>{
+      const groups=Number(block.getAttribute('data-prize-group-count')||0);
+      const table=block.querySelector('.mini-preview-prize-table');
+      if(!table)return;
+      table.style.minWidth=`${groups>=4?820:660}px`;
+      table.style.width='100%';
+      table.style.tableLayout='fixed';
+      table.querySelectorAll('th,td').forEach(cell=>{cell.style.whiteSpace='nowrap';cell.style.wordBreak='keep-all';cell.style.overflowWrap='normal'});
     });
     holder.querySelectorAll('.mini-preview-stage-brand').forEach(node=>{
       // Older saved templates may have flattened the two-line brand into one
@@ -1356,7 +1413,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
   $('#eventEditorBackdrop').addEventListener('beforeinput',event=>{if(event.target.closest('[data-content-edit],[data-table-header],[data-table-cell],[data-content-list-item]'))rememberContentBlockHistory()});
   $('#eventPreviewScroll').addEventListener('copy',event=>{const editable=event.target.closest('[contenteditable="true"]');if(!editable)return;const text=String(window.getSelection()?.toString()||'');if(text&&event.clipboardData){event.clipboardData.setData('text/plain',text);event.preventDefault()}});
   $('#eventPreviewScroll').addEventListener('cut',event=>{const editable=event.target.closest('[contenteditable="true"]');if(!editable)return;const text=String(window.getSelection()?.toString()||'');if(text&&event.clipboardData){event.clipboardData.setData('text/plain',text);event.preventDefault();document.execCommand('delete');editable.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteByCut'}))}});
-  function safeArticleInlineHtml(value){const holder=document.createElement('div');holder.innerHTML=String(value||'');const allowed=new Set(['A','B','STRONG','I','EM','U','S','BR','SPAN','SMALL','P','DIV','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','UL','OL','LI','HR','TABLE','THEAD','TBODY','TR','TH','TD','IMG','FIGURE','FIGCAPTION','CAPTION','LABEL','SELECT','OPTION']);holder.querySelectorAll('*').forEach(node=>{if(!allowed.has(node.tagName)){node.replaceWith(document.createTextNode(node.textContent||''));return}Array.from(node.attributes).forEach(attr=>{const name=attr.name.toLowerCase();if(name.startsWith('on'))node.removeAttribute(attr.name);else if(!['style','class','data-prize-select','data-prize-group','data-prize-table-grouped','aria-label','value','selected'].includes(name))node.removeAttribute(attr.name)});if(node.tagName==='A'){const href=String(node.getAttribute('href')||'');if(!/^(https?:|mailto:|tel:|#)/i.test(href))node.removeAttribute('href');else{node.setAttribute('target','_blank');node.setAttribute('rel','noreferrer')}}if(node.tagName==='IMG'&&!/^(https?:|data:image\/|\/)/i.test(String(node.getAttribute('src')||'')))node.remove()});return holder.innerHTML}
+   function safeArticleInlineHtml(value){const holder=document.createElement('div');holder.innerHTML=String(value||'');const allowed=new Set(['A','B','STRONG','I','EM','U','S','BR','SPAN','SMALL','P','DIV','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','UL','OL','LI','HR','TABLE','THEAD','TBODY','TR','TH','TD','IMG','FIGURE','FIGCAPTION','CAPTION','LABEL','SELECT','OPTION']);holder.querySelectorAll('*').forEach(node=>{if(!allowed.has(node.tagName)){node.replaceWith(document.createTextNode(node.textContent||''));return}Array.from(node.attributes).forEach(attr=>{const name=attr.name.toLowerCase();if(name.startsWith('on'))node.removeAttribute(attr.name);else if(!['style','class','data-prize-select','data-prize-group','data-prize-table-grouped','aria-label','value','selected'].includes(name)&&!((node.tagName==='TH'||node.tagName==='TD')&&['colspan','rowspan'].includes(name)))node.removeAttribute(attr.name);else if((node.tagName==='TH'||node.tagName==='TD')&&['colspan','rowspan'].includes(name)){const span=Number.parseInt(attr.value,10);if(!Number.isInteger(span)||span<1||span>20)node.removeAttribute(attr.name);else node.setAttribute(name,String(span))}});if(node.tagName==='A'){const href=String(node.getAttribute('href')||'');if(!/^(https?:|mailto:|tel:|#)/i.test(href))node.removeAttribute('href');else{node.setAttribute('target','_blank');node.setAttribute('rel','noreferrer')}}if(node.tagName==='IMG'&&!/^(https?:|data:image\/|\/)/i.test(String(node.getAttribute('src')||'')))node.remove()});return holder.innerHTML}
   (function installArticleEditor(){
     const overlay=`<div class="article-editor-backdrop hidden" id="articleEditorBackdrop"><section class="article-editor-shell" role="dialog" aria-modal="true" aria-labelledby="articleEditorHeading"><header class="article-editor-top"><div class="article-editor-brand" id="articleEditorHeading">赛事详情编辑器</div><input class="article-editor-title" id="articleEditorTitleInput" placeholder="输入赛事标题"><div class="article-editor-top-actions"><span class="article-editor-status" id="articleEditorStatus">未保存</span><button type="button" id="articleEditorPreviewBtn" title="只查看正文预览，不保存">手机预览</button><button type="button" id="articleEditorDraftsBtn" title="查看、继续编辑或删除已保存草稿；不会保存当前编辑">草稿管理</button><button type="button" class="primary" id="articleEditorDoneBtn">保存并返回</button><button type="button" id="articleEditorCloseBtn" aria-label="关闭赛事详情编辑器">×</button></div></header><div class="article-editor-toolbar" id="articleEditorToolbar"><button type="button" data-editor-cmd="undo">撤销</button><button type="button" data-editor-cmd="redo">重做</button><span class="article-editor-sep"></span><select id="articleEditorFormat" aria-label="文字格式"><option value="p">正文</option><option value="h2">标题 2</option><option value="h3">标题 3</option><option value="h4">标题 4</option><option value="blockquote">引用</option></select><select id="articleEditorFontSize" aria-label="字号"><option value="">字号</option><option value="12">12 px</option><option value="14">14 px</option><option value="16">16 px</option><option value="18">18 px</option><option value="20">20 px</option><option value="24">24 px</option><option value="28">28 px</option><option value="32">32 px</option></select><button type="button" data-editor-cmd="bold"><b>B</b></button><button type="button" data-editor-cmd="italic"><i>I</i></button><button type="button" data-editor-cmd="underline"><u>U</u></button><button type="button" data-editor-cmd="justifyLeft">左对齐</button><button type="button" data-editor-cmd="justifyCenter">居中</button><button type="button" data-editor-cmd="justifyRight">右对齐</button><button type="button" data-editor-cmd="justifyFull">两端</button><button type="button" data-editor-cmd="insertUnorderedList">• 列表</button><button type="button" data-editor-cmd="insertOrderedList">1. 列表</button><label class="article-editor-color-control">文字颜色 <input type="color" id="articleEditorTextColor" value="#343943" aria-label="选择文字颜色"></label><button type="button" data-editor-cmd="foreColor" data-editor-value="#e85d2a">文字色</button><button type="button" data-editor-cmd="hiliteColor" data-editor-value="#fff0c2">背景色</button><label class="article-editor-color-control">横幅底色 <input type="color" id="articleEditorBannerColor" value="#f20d0d" aria-label="选择横幅底色"></label><button type="button" id="articleEditorAddBannerBtn">插入横幅</button><button type="button" data-editor-cmd="formatBlock" data-editor-value="blockquote">引用</button><button type="button" data-editor-cmd="insertHorizontalRule">横线</button><button type="button" id="articleEditorLinkBtn">链接</button><button type="button" id="articleEditorImageBtn">图片</button><button type="button" id="articleEditorTableBtn">表格</button><label class="article-editor-color-control">奖金标题色 <input type="color" id="articleEditorPrizeColor" value="#c95b0c" aria-label="选择奖金表标题颜色"></label><button type="button" id="articleEditorPrizeTableBtn">奖金表</button><button type="button" id="articleEditorTemplateBtn">模板</button><button type="button" id="articleEditorFullBtn">全屏</button><input type="file" id="articleEditorImageInput" accept="image/*" hidden></div><main class="article-editor-main"><aside class="article-editor-side"><h3>赛事详情模板</h3><div class="article-editor-template" id="articleEditorTemplateList"><button type="button" data-template="event-detail">完整赛事详情模板</button><button type="button" data-template="notice">赛事公告</button><button type="button" data-template="schedule">赛程说明</button><button type="button" data-template="rules">竞赛规则</button><button type="button" data-template="award">奖项设置</button></div><p class="article-editor-help">这里只编辑“赛事详情”正文。赛事标题、封面、报名、赛事信息、赛段横幅、规则与奖项由赛事表单管理；图片未上传时会保持空白。可以编辑文字、字号、图片、表格、链接和排版，并通过手机预览检查。</p></aside><div class="article-editor-canvas-wrap"><article class="article-editor-page article-editor-style-context"><h1 contenteditable="true" id="articleEditorPageTitle" data-placeholder="请输入正文标题"></h1><div class="article-editor-canvas" id="articleEditorCanvas" contenteditable="true" spellcheck="true"></div></article></div></main><footer class="article-editor-bottom"><span class="article-editor-count" id="articleEditorCount">0 字</span><button type="button" id="articleEditorSaveDraftBtn" title="将当前正文保存为本机草稿">保存草稿</button><button type="button" id="articleEditorPhoneBtn">手机预览</button><button type="button" class="primary" id="articleEditorBottomDoneBtn">保存并返回</button></footer></section><div class="article-editor-preview hidden" id="articleEditorPhonePreview"><div class="article-editor-phone"><header class="article-editor-phone-head"><span>赛事详情</span><button type="button" id="articleEditorPhoneClose">×</button></header><div class="article-editor-phone-body" id="articleEditorPhoneBody"></div></div></div></div>`;
     document.body.insertAdjacentHTML('beforeend',overlay);
@@ -1381,8 +1438,8 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
           if(src)node.setAttribute('src',src);
           if(!/^(https?:|data:image\/|\/)/i.test(src))node.remove();
           else if(!node.getAttribute('alt'))node.setAttribute('alt','赛事详情图片');
-        }else{
-          Array.from(node.attributes).forEach(attr=>{const keep=attr.name==='style'||attr.name==='class'||attr.name==='data-align'||attr.name==='data-custom-banner'||attr.name==='data-prize-select'||attr.name==='data-prize-group'||attr.name==='data-prize-table-grouped'||attr.name==='aria-label'||((node.tagName==='OPTION'||node.tagName==='SELECT')&&['value','selected'].includes(attr.name));if(!keep)node.removeAttribute(attr.name)});
+         }else{
+           Array.from(node.attributes).forEach(attr=>{const name=attr.name.toLowerCase();const keep=attr.name==='style'||attr.name==='class'||attr.name==='data-align'||attr.name==='data-custom-banner'||attr.name==='data-prize-select'||attr.name==='data-prize-group'||attr.name==='data-prize-table-grouped'||attr.name==='aria-label'||((node.tagName==='OPTION'||node.tagName==='SELECT')&&['value','selected'].includes(attr.name))||((node.tagName==='TH'||node.tagName==='TD')&&['colspan','rowspan'].includes(name));if(!keep)node.removeAttribute(attr.name);else if((node.tagName==='TH'||node.tagName==='TD')&&['colspan','rowspan'].includes(name)){const span=Number.parseInt(attr.value,10);if(!Number.isInteger(span)||span<1||span>20)node.removeAttribute(attr.name);else node.setAttribute(name,String(span))}});
         }
       });
       return holder.innerHTML;
@@ -1414,7 +1471,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       return {type:'table',title:String(titleNode?.textContent||'').trim(),headers,rows:bodyRows,titleColor:styleColor(titleNode)||'#c95b0c',headerColor:styleColor(headerCell)||'#eaf3fb',bodyColor:styleColor(firstBody)||'#f2f2f2',totalColor:styleColor(lastBody)||'#c95b0c',textColor:'#222222'};
     }
     function expandGroupedTableBlock(block,table){if(!block||!table)return block;const header=table.querySelector('thead tr');const cells=Array.from(header?.querySelectorAll('th,td')||[]);if(cells.some(cell=>Number(cell.getAttribute('colspan')||1)>1))block.headers=cells.flatMap(cell=>Number(cell.getAttribute('colspan')||1)>1?[cell.textContent.trim(),'奖金']:[cell.textContent.trim()]);return block}
-    function nodeToBlock(node){if(node.nodeType===3){const text=node.textContent.trim();return text?{type:'paragraph',text,html:escHtml(text)}:null}if(node.nodeType!==1)return null;const tag=node.tagName.toLowerCase(),html=cleanHtml(node.innerHTML),text=node.textContent.trim(),style=String(node.getAttribute('style')||''),className=String(node.getAttribute('class')||''),dataAlign=String(node.getAttribute('data-align')||''),align=(style.match(/text-align:\s*(left|center|right|justify)/i)||[])[1]||dataAlign||((className.match(/content-align-(left|center|right|justify)/i)||[])[1])||'left';if(node.getAttribute('data-prize-table-grouped')==='true'){const direct=node.querySelector(':scope > .mini-preview-table');if(direct){const block=expandGroupedTableBlock(nodeToBlock(direct),direct);if(block){block.title=String(node.querySelector(':scope > .mini-preview-prize-title')?.textContent||block.title||'').trim();return block}}return groupedPrizeNodeToBlock(node)}if(tag==='hr')return {type:'divider'};if(tag==='img')return {type:'image',text:'',url:node.getAttribute('src')||''};if(tag==='figure'){const img=node.querySelector('img');return img?{type:'image',text:node.textContent.trim(),url:img.getAttribute('src')||''}:null}if(/^h[1-6]$/.test(tag))return {type:'heading',text,html,align,bold:false};if(tag==='blockquote')return {type:'note',text,html,align,bold:false};if(tag==='ul'||tag==='ol')return {type:'list',items:Array.from(node.querySelectorAll(':scope > li')).map(li=>li.textContent.trim()).filter(Boolean),listStyle:tag==='ol'?'ordered':'unordered',align,bold:false};if(tag==='table'){const rows=Array.from(node.querySelectorAll('tr'));const headerCells=Array.from(rows.shift()?.querySelectorAll('th,td')||[]);const headers=headerCells.map(cell=>cell.textContent.trim());const styleColor=node=>{const value=(String(node?.getAttribute('style')||'').match(/background-color\s*:\s*(#[0-9a-f]{6})/i)||[])[1]||'';return value.toLowerCase()};const bodyRows=rows.map(row=>Array.from(row.querySelectorAll('th,td')).map(cell=>cell.textContent.trim()));const firstBody=rows[0]?.querySelector('td');const lastBody=rows[rows.length-1]?.querySelector('td');const titleNode=node.querySelector('caption');return {type:'table',title:String(node.querySelector('caption')?.textContent||node.getAttribute('data-prize-title')||'').trim(),headers,rows:bodyRows,titleColor:styleColor(titleNode)||'#c95b0c',headerColor:styleColor(headerCells[0])||'#eaf3fb',bodyColor:styleColor(firstBody)||'#f2f2f2',totalColor:styleColor(lastBody)||'#c95b0c',textColor:'#222222'}}if(['p','div','span'].includes(tag)||text)return {type:'paragraph',text,html,align,bold:false};return null}
+     function nodeToBlock(node){if(node.nodeType===3){const text=node.textContent.trim();return text?{type:'paragraph',text,html:escHtml(text)}:null}if(node.nodeType!==1)return null;const tag=node.tagName.toLowerCase(),html=cleanHtml(node.innerHTML),text=node.textContent.trim(),style=String(node.getAttribute('style')||''),className=String(node.getAttribute('class')||''),dataAlign=String(node.getAttribute('data-align')||''),align=(style.match(/text-align:\s*(left|center|right|justify)/i)||[])[1]||dataAlign||((className.match(/content-align-(left|center|right|justify)/i)||[])[1])||'left';if(node.getAttribute('data-prize-table-grouped')==='true'){const direct=node.querySelector(':scope > .mini-preview-table');if(direct){const block=expandGroupedTableBlock(nodeToBlock(direct),direct);if(block){block.title=String(node.querySelector(':scope > .mini-preview-prize-title')?.textContent||block.title||'').trim();return block}}return groupedPrizeNodeToBlock(node)}if(tag==='hr')return {type:'divider'};if(tag==='img')return {type:'image',text:'',url:node.getAttribute('src')||''};if(tag==='figure'){const img=node.querySelector('img');return img?{type:'image',text:node.textContent.trim(),url:img.getAttribute('src')||''}:null}if(/^h[1-6]$/.test(tag))return {type:'heading',text,html,align,bold:false};if(tag==='blockquote')return {type:'note',text,html,align,bold:false};if(tag==='ul'||tag==='ol')return {type:'list',items:Array.from(node.querySelectorAll(':scope > li')).map(li=>li.textContent.trim()).filter(Boolean),listStyle:tag==='ol'?'ordered':'unordered',align,bold:false};if(tag==='table'){const rows=Array.from(node.querySelectorAll('tr'));const headerCells=Array.from(rows.shift()?.querySelectorAll('th,td')||[]);const headers=headerCells.some(cell=>Number(cell.getAttribute('colspan')||1)>1)?headerCells.flatMap(cell=>Number(cell.getAttribute('colspan')||1)>1?[cell.textContent.trim(),'奖金']:[cell.textContent.trim()]):headerCells.map(cell=>cell.textContent.trim());const styleColor=node=>{const value=(String(node?.getAttribute('style')||'').match(/background-color\s*:\s*(#[0-9a-f]{6})/i)||[])[1]||'';return value.toLowerCase()};const bodyRows=rows.map(row=>Array.from(row.querySelectorAll('th,td')).map(cell=>cell.textContent.trim()));const firstBody=rows[0]?.querySelector('td');const lastBody=rows[rows.length-1]?.querySelector('td');const titleNode=node.querySelector('caption');return {type:'table',title:String(node.querySelector('caption')?.textContent||node.getAttribute('data-prize-title')||'').trim(),headers,rows:bodyRows,titleColor:styleColor(titleNode)||'#c95b0c',headerColor:styleColor(headerCells[0])||'#eaf3fb',bodyColor:styleColor(firstBody)||'#f2f2f2',totalColor:styleColor(lastBody)||'#c95b0c',textColor:'#222222'}}if(['p','div','span'].includes(tag)||text)return {type:'paragraph',text,html,align,bold:false};return null}
     function htmlToBlocks(){const holder=document.createElement('div');holder.innerHTML=cleanHtml(canvas.innerHTML);return Array.from(holder.childNodes).map(nodeToBlock).filter(Boolean)}
     function detailRootToBlocks(root){
       const result=[];
@@ -1766,7 +1823,10 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       previewEditMode=false;panel?.classList.remove('preview-editing');
       if(toggle){toggle.disabled=true;toggle.setAttribute('aria-pressed','false');toggle.textContent='在预览中编辑';toggle.title='正文编辑器预览为只读，请返回编辑器修改'}
       $('#eventPreviewLive').textContent='手机视口 375 × 812';
-      renderEventPreview(false,editorHtmlForPreview());
+       // Normalize legacy prize tables before they enter the 375px phone
+       // viewport.  Otherwise an old 8-column table is compressed into
+       // character-wide cells before the shared preview CSS can help.
+       renderEventPreview(false,normalizeEditorDetailHtml(editorHtmlForPreview()));
       preview.classList.add('article-editor-preview-active');preview.classList.remove('hidden');
     }
     function insertTemplate(name){if(name==='event-detail'){if(canvas.textContent.trim()&&!confirm('将用赛事详情模板替换当前正文，继续吗？'))return;const fullHtml=buildDetailPageHtml();detailPageHtmlDraft='';detailPageConfigured=false;pageTitle.textContent='';canvas.innerHTML=extractDetailBodyHtml(fullHtml)||blocksToHtml();repairEditorListStructure();remember();updateCount();return}const templates={notice:'<h2>赛事公告</h2><p>请填写赛事公告内容。</p>',schedule:'<h2>赛程说明</h2><p>请填写比赛时间、集合地点和赛段安排。</p>',rules:'<h2>竞赛规则</h2><ol><li>请填写比赛规则。</li><li>请填写计时和罚时说明。</li></ol>',award:'<h2>奖项设置</h2><table><thead><tr><th>组别</th><th>奖项</th><th>奖励</th></tr></thead><tbody><tr><td>公开组</td><td>冠军</td><td>待填写</td></tr></tbody></table>'};canvas.focus();document.execCommand('insertHTML',false,templates[name]||'');remember();updateCount()}
