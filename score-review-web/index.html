@@ -237,7 +237,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .event-preview-wide .mini-preview-prize-group[hidden]{display:none!important}
 .event-preview-wide .mini-preview-prize-group .mini-preview-prize-block{margin-top:0}
 .event-preview-wide .mini-preview-prize-group .mini-preview-table{font-size:12px}
-.event-preview-wide .mini-preview-table-wrap{width:100%;overflow:hidden}
+.event-preview-wide .mini-preview-table-wrap{width:100%;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
 .event-preview-wide .mini-preview-prize-table-wrap,.event-preview-wide .mini-preview-prize-table{min-width:0}
 .event-preview-wide .mini-preview-prize-table th{font-size:12px;padding:6px 4px;background:#fff}
 .event-preview-wide .mini-preview-prize-table td{font-size:12px;padding:5px 4px}
@@ -1036,6 +1036,34 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
     const textOf=cell=>String(cell?.textContent||'').replace(/\s+/g,' ').trim();
     const splitCompact=value=>{const text=textOf(value);const match=text.match(/^(.+?)[：:]\s*(.+)$/);return match?[match[1].trim(),match[2].trim()]:[text,text==='--'?'--':'']};
     const copyStyle=(from,to)=>{const style=String(from?.getAttribute('style')||'').trim();if(style)to.setAttribute('style',style)};
+    // Some older saved pages already carry the grouped marker but lost the
+    // header spans during an earlier sanitization pass. In that state the
+    // browser renders four headers over the first four of eight body columns,
+    // leaving the right half blank. Restore the structural relationship before
+    // any preview CSS is applied.
+    const repairGroupedTable=wrapper=>{
+      const table=wrapper?.querySelector(':scope > .mini-preview-table')||wrapper?.querySelector('table');
+      if(!table)return;
+      const headerRow=table.querySelector('thead tr')||table.querySelector('tr');
+      const headerCells=headerRow?Array.from(headerRow.children).filter(cell=>cell.tagName==='TH'||cell.tagName==='TD'):[];
+      if(headerCells.length<3)return;
+      const bodyRows=Array.from(table.querySelectorAll('tbody tr')).length?Array.from(table.querySelectorAll('tbody tr')):Array.from(table.querySelectorAll('tr')).filter(row=>row!==headerRow);
+      const bodyWidth=Math.max(0,...bodyRows.map(row=>Array.from(row.children).reduce((sum,cell)=>sum+Math.max(1,Number(cell.getAttribute('colspan')||1)),0)));
+      const labels=headerCells.map(textOf).join(' ');
+      const looksGrouped=headerCells.length>=3&&bodyWidth>=headerCells.length*2&&/(奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名|组)/i.test(labels);
+      if(!looksGrouped)return;
+      headerCells.forEach(cell=>{if(Number(cell.getAttribute('colspan')||1)===1)cell.setAttribute('colspan','2')});
+      wrapper.setAttribute('data-prize-table-grouped','true');
+      wrapper.setAttribute('data-prize-group-count',String(headerCells.length));
+      table.classList.add('mini-preview-prize-table');
+      if(table.parentElement===wrapper){
+        const wrap=document.createElement('div');
+        wrap.className='mini-preview-table-wrap';
+        table.replaceWith(wrap);
+        wrap.append(table);
+      }
+    };
+    holder.querySelectorAll('[data-prize-table-grouped="true"]').forEach(repairGroupedTable);
     holder.querySelectorAll('table').forEach(table=>{
       if(table.closest('[data-prize-table-grouped="true"]'))return;
       const rows=Array.from(table.querySelectorAll('tr'));
@@ -1084,6 +1112,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       });
       nextTable.append(tbody);const wrap=document.createElement('div');wrap.className='mini-preview-table-wrap';wrap.append(nextTable);wrapper.append(wrap);table.replaceWith(wrapper);
     });
+    holder.querySelectorAll('[data-prize-table-grouped="true"]').forEach(repairGroupedTable);
     // Upgrade grouped tables produced by the previous selector version.
     holder.querySelectorAll('[data-prize-table-grouped="true"]').forEach(wrapper=>{
       const groups=Array.from(wrapper.querySelectorAll(':scope > .mini-preview-prize-group'));
@@ -1178,6 +1207,7 @@ async function saveCloudStage(stage){pendingWriteCount++;try{if(!API_BASE)return
       node.style.webkitOverflowScrolling='touch';
     });
     holder.querySelectorAll('.mini-preview-prize-block[data-prize-group-count]').forEach(block=>{
+      repairGroupedTable(block);
       const groups=Number(block.getAttribute('data-prize-group-count')||0);
       const table=block.querySelector('.mini-preview-prize-table');
       if(!table)return;

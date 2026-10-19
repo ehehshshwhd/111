@@ -62,14 +62,145 @@ function eventInfoLabels(value) {
 // The full-page editor publishes a single, already-formatted HTML document.
 // Keep the client-side fallback conservative as well: rich-text should never
 // execute scripts or event handlers received from a remote event record.
+function repairPrizeTableColspans(value) {
+  const source = String(value || '')
+  const cellPattern = /<(th|td)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi
+  const textOf = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()
+  return source.replace(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi, tableHtml => {
+    const headMatch = tableHtml.match(/<thead\b[^>]*>[\s\S]*?<tr\b[^>]*>([\s\S]*?)<\/tr\s*>[\s\S]*?<\/thead\s*>/i)
+    const headerInner = headMatch ? headMatch[1] : (tableHtml.match(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/i) || [])[1]
+    if (!headerInner) return tableHtml
+    const headerCells = [...headerInner.matchAll(cellPattern)]
+    if (headerCells.length < 3) return tableHtml
+    const bodyMatch = tableHtml.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i)
+    const bodyRows = [...(bodyMatch ? bodyMatch[1] : tableHtml).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)]
+    const bodyWidth = Math.max(0, ...bodyRows.map(row => [...row[1].matchAll(cellPattern)].reduce((sum, cell) => {
+      const span = Number.parseInt((cell[2].match(/\bcolspan\s*=\s*["']?(\d+)/i) || [])[1], 10)
+      return sum + (Number.isInteger(span) && span > 0 ? span : 1)
+    }, 0)))
+    const labels = headerCells.map(cell => textOf(cell[3])).join(' ')
+    if (bodyWidth < headerCells.length * 2 || !/(奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名|组)/i.test(labels)) return tableHtml
+    const repairedHeader = headerInner.replace(cellPattern, (full, tag, attrs, inner) => {
+      if (/\bcolspan\s*=/i.test(attrs)) return full
+      return `<${tag}${attrs} colspan="2">${inner}</${tag}>`
+    })
+    return headMatch ? tableHtml.replace(headMatch[1], repairedHeader) : tableHtml.replace(headerInner, repairedHeader)
+  })
+}
+
+// WeChat rich-text does not render table column spans consistently across
+// clients. Convert the grouped prize tables emitted by the web editor into a
+// mobile-safe, two-column layout (one prize group at a time) before handing
+// the nodes to rich-text. This keeps every value inside the phone viewport and
+// avoids the eight narrow columns that split Chinese characters and amounts.
+function convertGroupedPrizeTables(value) {
+  const source = String(value || '')
+  const cellPattern = /<(th|td)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi
+  const rowPattern = /<tr\b[^>]*>[\s\S]*?<\/tr\s*>/gi
+  const textOf = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()
+  const styleOf = attrs => {
+    const match = String(attrs || '').match(/\bstyle\s*=\s*["']([^"']*)["']/i)
+    if (!match) return ''
+    const allowed = new Set(['background-color', 'color', 'font-weight', 'font-style', 'text-align', 'text-decoration'])
+    return match[1].split(';').map(part => {
+      const index = part.indexOf(':')
+      if (index < 0) return ''
+      const property = part.slice(0, index).trim().toLowerCase()
+      const declaration = part.slice(index + 1).trim()
+      if (!allowed.has(property) || !declaration || /[<>"']/g.test(declaration)) return ''
+      return `${property}:${declaration}`
+    }).filter(Boolean).join(';')
+  }
+  const cellSpan = attrs => {
+    const span = Number.parseInt((String(attrs || '').match(/\bcolspan\s*=\s*["']?(\d+)/i) || [])[1], 10)
+    return Number.isInteger(span) && span > 0 ? span : 1
+  }
+  const rowCells = rowHtml => [...String(rowHtml || '').matchAll(cellPattern)]
+  return source.replace(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi, tableHtml => {
+    if (/mini-preview-mobile-prize/i.test(tableHtml)) return tableHtml
+    const rows = [...tableHtml.matchAll(rowPattern)]
+    if (!rows.length) return tableHtml
+    const headMatch = tableHtml.match(/<thead\b[^>]*>[\s\S]*?<tr\b[^>]*>([\s\S]*?)<\/tr\s*>[\s\S]*?<\/thead\s*>/i)
+    const headerInner = headMatch ? headMatch[1] : rows[0][0]
+    const headerCells = rowCells(headerInner)
+    if (headerCells.length < 3) return tableHtml
+    const bodyMatch = tableHtml.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i)
+    const bodyRows = bodyMatch
+      ? [...bodyMatch[1].matchAll(rowPattern)]
+      : rows.slice(1)
+    if (!bodyRows.length) return tableHtml
+    const bodyWidths = bodyRows.map(row => rowCells(row[0]).reduce((sum, cell) => sum + cellSpan(cell[2]), 0))
+    const bodyWidth = Math.max(0, ...bodyWidths)
+    const effectiveHeaderWidth = headerCells.reduce((sum, cell) => sum + cellSpan(cell[2]), 0)
+    const labels = headerCells.map(cell => textOf(cell[3])).join(' ')
+    const looksGrouped = bodyWidth >= Math.max(headerCells.length * 2, effectiveHeaderWidth) && /(?:奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名|组)/i.test(labels)
+    if (!looksGrouped) return tableHtml
+
+    const hasSpannedHeaders = headerCells.some(cell => cellSpan(cell[2]) > 1)
+    const pairHeaders = headerCells.length >= 4 && headerCells.length % 2 === 0 && !hasSpannedHeaders && effectiveHeaderWidth === bodyWidth
+      ? headerCells.filter((_, index) => index % 2 === 0)
+      : headerCells
+    const groupCount = pairHeaders.length
+    if (groupCount < 3 || bodyWidth < groupCount * 2) return tableHtml
+
+    const captionMatch = tableHtml.match(/<caption\b[^>]*>([\s\S]*?)<\/caption\s*>/i)
+    const title = captionMatch ? `<div class="mini-preview-mobile-prize-title" style="display:block;width:100%;box-sizing:border-box;padding:10px 8px;text-align:center;font-weight:700;line-height:1.4;overflow-wrap:anywhere">${captionMatch[1]}</div>` : ''
+    const groupMarkup = pairHeaders.map((header, groupIndex) => {
+      const groupLabel = textOf(header[3]) || `第${groupIndex + 1}组`
+      const groupStyle = styleOf(header[2])
+      const rowsMarkup = bodyRows.map((row, rowIndex) => {
+        const cells = rowCells(row[0])
+        const isTotal = /mini-preview-prize-total-row/i.test(row[0]) || cells.some(cell => /^(小计|合计)/.test(textOf(cell[3])))
+        const perGroupTotal = isTotal && cells.length === groupCount
+        let selected
+        if (perGroupTotal) selected = [cells[groupIndex]]
+        else if (cells.length === groupCount) selected = [cells[groupIndex]]
+        else {
+          const start = groupIndex * 2
+          selected = cells.slice(start, start + 2)
+        }
+        if (!selected.length) return ''
+        const rowStyle = `display:flex;width:100%;box-sizing:border-box;${rowIndex ? 'border-top:1px solid #e6e6e6;' : ''}`
+        const cellsMarkup = selected.map((cell, offset) => {
+          const cellStyle = styleOf(cell[2])
+          const totalCell = isTotal || selected.length === 1
+          const contentStyle = [
+            'display:flex',
+            'align-items:center',
+            'justify-content:center',
+            'flex:1 1 0',
+            'min-width:0',
+            'box-sizing:border-box',
+            'padding:9px 5px',
+            'text-align:center',
+            'line-height:1.35',
+            'overflow-wrap:anywhere',
+            'word-break:break-word',
+            'border-right:1px solid #e6e6e6',
+            totalCell ? 'font-weight:700' : '',
+            offset === 1 && selected.length > 1 ? 'white-space:nowrap;word-break:keep-all' : '',
+            cellStyle
+          ].filter(Boolean).join(';')
+          return `<div style="${contentStyle}">${cell[3]}</div>`
+        }).join('')
+        return `<div style="${rowStyle}">${cellsMarkup}</div>`
+      }).join('')
+      const headerRow = `<div style="display:flex;width:100%;box-sizing:border-box;background:#f3f3f3;font-weight:700;${groupStyle}"><div style="flex:1 1 0;min-width:0;box-sizing:border-box;padding:9px 5px;text-align:center;line-height:1.35;overflow-wrap:anywhere;border-right:1px solid #d8d8d8">名次</div><div style="flex:1 1 0;min-width:0;box-sizing:border-box;padding:9px 5px;text-align:center;line-height:1.35;white-space:nowrap;border-right:1px solid #d8d8d8">奖金</div></div>`
+      return `<div class="mini-preview-mobile-prize-group" style="width:100%;box-sizing:border-box;margin:0 0 12px;border:1px solid #d8d8d8;overflow:hidden"><div style="display:block;width:100%;box-sizing:border-box;padding:8px 6px;text-align:center;font-weight:700;line-height:1.35;overflow-wrap:anywhere;${groupStyle}">${groupLabel}</div>${headerRow}${rowsMarkup}</div>`
+    }).join('')
+    return `<div class="mini-preview-mobile-prize" style="display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden">${title}${groupMarkup}</div>`
+  })
+}
+
 function normalizeDetailPageHtml(value) {
-  return String(value == null ? '' : value)
+  const sanitized = String(value == null ? '' : value)
     .slice(0, 300000)
     .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, '')
     .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe\s*>/gi, '')
     .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(\s(?:href|src)\s*=\s*["'])\s*javascript:[^"']*(["'])/gi, '$1$2')
+  return convertGroupedPrizeTables(repairPrizeTableColspans(sanitized))
 }
 
 function normalizeDetailPageImageEntries(value) {
