@@ -1,6 +1,7 @@
 const auth = require('../../../utils/auth')
 const container = require('../../../utils/cloud-container')
 const { ALL_STAGES } = require('../../../utils/stages')
+const { convertGroupedPrizeTables, normalizePrizeTableColors, normalizePrizeTitleColors, repairPrizeTableColspans } = require('../../../utils/prize-table')
 
 function normalizeEventId(value) {
   const id = String(value == null ? '' : value).trim()
@@ -59,139 +60,6 @@ function eventInfoLabels(value) {
   }, {})
 }
 
-// The full-page editor publishes a single, already-formatted HTML document.
-// Keep the client-side fallback conservative as well: rich-text should never
-// execute scripts or event handlers received from a remote event record.
-function repairPrizeTableColspans(value) {
-  const source = String(value || '')
-  const cellPattern = /<(th|td)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi
-  const textOf = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()
-  return source.replace(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi, tableHtml => {
-    const headMatch = tableHtml.match(/<thead\b[^>]*>[\s\S]*?<tr\b[^>]*>([\s\S]*?)<\/tr\s*>[\s\S]*?<\/thead\s*>/i)
-    const headerInner = headMatch ? headMatch[1] : (tableHtml.match(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/i) || [])[1]
-    if (!headerInner) return tableHtml
-    const headerCells = [...headerInner.matchAll(cellPattern)]
-    if (headerCells.length < 3) return tableHtml
-    const bodyMatch = tableHtml.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i)
-    const bodyRows = [...(bodyMatch ? bodyMatch[1] : tableHtml).matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)]
-    const bodyWidth = Math.max(0, ...bodyRows.map(row => [...row[1].matchAll(cellPattern)].reduce((sum, cell) => {
-      const span = Number.parseInt((cell[2].match(/\bcolspan\s*=\s*["']?(\d+)/i) || [])[1], 10)
-      return sum + (Number.isInteger(span) && span > 0 ? span : 1)
-    }, 0)))
-    const labels = headerCells.map(cell => textOf(cell[3])).join(' ')
-    if (bodyWidth < headerCells.length * 2 || !/(奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名|组)/i.test(labels)) return tableHtml
-    const repairedHeader = headerInner.replace(cellPattern, (full, tag, attrs, inner) => {
-      if (/\bcolspan\s*=/i.test(attrs)) return full
-      return `<${tag}${attrs} colspan="2">${inner}</${tag}>`
-    })
-    return headMatch ? tableHtml.replace(headMatch[1], repairedHeader) : tableHtml.replace(headerInner, repairedHeader)
-  })
-}
-
-// WeChat rich-text does not render table column spans consistently across
-// clients. Convert the grouped prize tables emitted by the web editor into a
-// mobile-safe, two-column layout (one prize group at a time) before handing
-// the nodes to rich-text. This keeps every value inside the phone viewport and
-// avoids the eight narrow columns that split Chinese characters and amounts.
-function convertGroupedPrizeTables(value) {
-  const source = String(value || '')
-  const cellPattern = /<(th|td)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi
-  const rowPattern = /<tr\b[^>]*>[\s\S]*?<\/tr\s*>/gi
-  const textOf = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/gi, ' ').replace(/\s+/g, ' ').trim()
-  const styleOf = attrs => {
-    const match = String(attrs || '').match(/\bstyle\s*=\s*["']([^"']*)["']/i)
-    if (!match) return ''
-    const allowed = new Set(['background-color', 'color', 'font-weight', 'font-style', 'text-align', 'text-decoration'])
-    return match[1].split(';').map(part => {
-      const index = part.indexOf(':')
-      if (index < 0) return ''
-      const property = part.slice(0, index).trim().toLowerCase()
-      const declaration = part.slice(index + 1).trim()
-      if (!allowed.has(property) || !declaration || /[<>"']/g.test(declaration)) return ''
-      return `${property}:${declaration}`
-    }).filter(Boolean).join(';')
-  }
-  const cellSpan = attrs => {
-    const span = Number.parseInt((String(attrs || '').match(/\bcolspan\s*=\s*["']?(\d+)/i) || [])[1], 10)
-    return Number.isInteger(span) && span > 0 ? span : 1
-  }
-  const rowCells = rowHtml => [...String(rowHtml || '').matchAll(cellPattern)]
-  return source.replace(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi, tableHtml => {
-    if (/mini-preview-mobile-prize/i.test(tableHtml)) return tableHtml
-    const rows = [...tableHtml.matchAll(rowPattern)]
-    if (!rows.length) return tableHtml
-    const headMatch = tableHtml.match(/<thead\b[^>]*>[\s\S]*?<tr\b[^>]*>([\s\S]*?)<\/tr\s*>[\s\S]*?<\/thead\s*>/i)
-    const headerInner = headMatch ? headMatch[1] : rows[0][0]
-    const headerCells = rowCells(headerInner)
-    if (headerCells.length < 3) return tableHtml
-    const bodyMatch = tableHtml.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody\s*>/i)
-    const bodyRows = bodyMatch
-      ? [...bodyMatch[1].matchAll(rowPattern)]
-      : rows.slice(1)
-    if (!bodyRows.length) return tableHtml
-    const bodyWidths = bodyRows.map(row => rowCells(row[0]).reduce((sum, cell) => sum + cellSpan(cell[2]), 0))
-    const bodyWidth = Math.max(0, ...bodyWidths)
-    const effectiveHeaderWidth = headerCells.reduce((sum, cell) => sum + cellSpan(cell[2]), 0)
-    const labels = headerCells.map(cell => textOf(cell[3])).join(' ')
-    const looksGrouped = bodyWidth >= Math.max(headerCells.length * 2, effectiveHeaderWidth) && /(?:奖金|名次|排位|预赛|决赛|公开[A-ZＡ-Ｚ]|组名|组)/i.test(labels)
-    if (!looksGrouped) return tableHtml
-
-    const hasSpannedHeaders = headerCells.some(cell => cellSpan(cell[2]) > 1)
-    const pairHeaders = headerCells.length >= 4 && headerCells.length % 2 === 0 && !hasSpannedHeaders && effectiveHeaderWidth === bodyWidth
-      ? headerCells.filter((_, index) => index % 2 === 0)
-      : headerCells
-    const groupCount = pairHeaders.length
-    if (groupCount < 3 || bodyWidth < groupCount * 2) return tableHtml
-
-    const captionMatch = tableHtml.match(/<caption\b[^>]*>([\s\S]*?)<\/caption\s*>/i)
-    const title = captionMatch ? `<div class="mini-preview-mobile-prize-title" style="display:block;width:100%;box-sizing:border-box;padding:10px 8px;text-align:center;font-weight:700;line-height:1.4;overflow-wrap:anywhere">${captionMatch[1]}</div>` : ''
-    const groupMarkup = pairHeaders.map((header, groupIndex) => {
-      const groupLabel = textOf(header[3]) || `第${groupIndex + 1}组`
-      const groupStyle = styleOf(header[2])
-      const rowsMarkup = bodyRows.map((row, rowIndex) => {
-        const cells = rowCells(row[0])
-        const isTotal = /mini-preview-prize-total-row/i.test(row[0]) || cells.some(cell => /^(小计|合计)/.test(textOf(cell[3])))
-        const perGroupTotal = isTotal && cells.length === groupCount
-        let selected
-        if (perGroupTotal) selected = [cells[groupIndex]]
-        else if (cells.length === groupCount) selected = [cells[groupIndex]]
-        else {
-          const start = groupIndex * 2
-          selected = cells.slice(start, start + 2)
-        }
-        if (!selected.length) return ''
-        const rowStyle = `display:flex;width:100%;box-sizing:border-box;${rowIndex ? 'border-top:1px solid #e6e6e6;' : ''}`
-        const cellsMarkup = selected.map((cell, offset) => {
-          const cellStyle = styleOf(cell[2])
-          const totalCell = isTotal || selected.length === 1
-          const contentStyle = [
-            'display:flex',
-            'align-items:center',
-            'justify-content:center',
-            'flex:1 1 0',
-            'min-width:0',
-            'box-sizing:border-box',
-            'padding:9px 5px',
-            'text-align:center',
-            'line-height:1.35',
-            'overflow-wrap:anywhere',
-            'word-break:break-word',
-            'border-right:1px solid #e6e6e6',
-            totalCell ? 'font-weight:700' : '',
-            offset === 1 && selected.length > 1 ? 'white-space:nowrap;word-break:keep-all' : '',
-            cellStyle
-          ].filter(Boolean).join(';')
-          return `<div style="${contentStyle}">${cell[3]}</div>`
-        }).join('')
-        return `<div style="${rowStyle}">${cellsMarkup}</div>`
-      }).join('')
-      const headerRow = `<div style="display:flex;width:100%;box-sizing:border-box;background:#f3f3f3;font-weight:700;${groupStyle}"><div style="flex:1 1 0;min-width:0;box-sizing:border-box;padding:9px 5px;text-align:center;line-height:1.35;overflow-wrap:anywhere;border-right:1px solid #d8d8d8">名次</div><div style="flex:1 1 0;min-width:0;box-sizing:border-box;padding:9px 5px;text-align:center;line-height:1.35;white-space:nowrap;border-right:1px solid #d8d8d8">奖金</div></div>`
-      return `<div class="mini-preview-mobile-prize-group" style="width:100%;box-sizing:border-box;margin:0 0 12px;border:1px solid #d8d8d8;overflow:hidden"><div style="display:block;width:100%;box-sizing:border-box;padding:8px 6px;text-align:center;font-weight:700;line-height:1.35;overflow-wrap:anywhere;${groupStyle}">${groupLabel}</div>${headerRow}${rowsMarkup}</div>`
-    }).join('')
-    return `<div class="mini-preview-mobile-prize" style="display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:hidden">${title}${groupMarkup}</div>`
-  })
-}
-
 function normalizeDetailPageHtml(value) {
   const sanitized = String(value == null ? '' : value)
     .slice(0, 300000)
@@ -200,7 +68,201 @@ function normalizeDetailPageHtml(value) {
     .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe\s*>/gi, '')
     .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(\s(?:href|src)\s*=\s*["'])\s*javascript:[^"']*(["'])/gi, '$1$2')
-  return convertGroupedPrizeTables(repairPrizeTableColspans(sanitized))
+  return normalizeDetailPageTextStyles(convertResponsiveDetailTables(convertGroupedPrizeTables(repairPrizeTableColspans(normalizePrizeTitleColors(sanitized)))))
+}
+
+function convertResponsiveDetailTables(value) {
+  const source = String(value || '')
+  const tableToken = /<\/?table\b[^>]*>/gi
+  const ranges = []
+  let depth = 0
+  let start = -1
+  let match
+  while ((match = tableToken.exec(source))) {
+    if (/^<table\b/i.test(match[0])) {
+      if (depth === 0) start = match.index
+      depth += 1
+    } else if (depth > 0) {
+      depth -= 1
+      if (depth === 0 && start >= 0) {
+        ranges.push([start, tableToken.lastIndex])
+        start = -1
+      }
+    }
+  }
+  if (!ranges.length) return source
+  let result = source
+  ranges.reverse().forEach(([from, to]) => {
+    const table = result.slice(from, to)
+    const converted = convertResponsiveDetailTable(table)
+    if (converted !== table) result = result.slice(0, from) + converted + result.slice(to)
+  })
+  return result
+}
+
+function convertResponsiveDetailTable(tableHtml) {
+  const open = String(tableHtml).match(/^<table\b([^>]*)>/i)
+  if (!open) return tableHtml
+  const inner = String(tableHtml).slice(open[0].length).replace(/<\/table\s*>$/i, '')
+  // Keep merged and nested tables on the native renderer; their geometry cannot
+  // be represented by equal-width mobile cells without changing the content.
+  if (/<table\b/i.test(inner) || /\b(?:rowspan|colspan)\s*=/i.test(inner)) return tableHtml
+  const rows = [...inner.matchAll(/<tr\b([^>]*)>([\s\S]*?)<\/tr\s*>/gi)].map(match => ({
+    attrs: match[1],
+    cells: [...match[2].matchAll(/<(th|td)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi)].map(cell => ({
+      tag: cell[1].toLowerCase(), attrs: cell[2], content: cell[3],
+    }))
+  })).filter(row => row.cells.length)
+  const columnCount = Math.max(0, ...rows.map(row => row.cells.length))
+  if (columnCount < 2) return tableHtml
+  const columnWeights = Array.from({ length: columnCount }, (_, cellIndex) => {
+    const longestCell = Math.max(0, ...rows.map(row => {
+      const cell = row.cells[cellIndex]
+      return cell ? cell.content.replace(/<[^>]*>/g, '').replace(/&(?:nbsp|#160);/gi, ' ').trim().length : 0
+    }))
+    return Math.min(8, Math.max(3, longestCell))
+  })
+
+  const captionMatch = inner.match(/<caption\b[^>]*>([\s\S]*?)<\/caption\s*>/i)
+  const caption = captionMatch ? `<div class="detail-mobile-table-caption" style="display:block;width:100%;box-sizing:border-box;text-align:center;line-height:1.4;overflow-wrap:anywhere">${captionMatch[1]}</div>` : ''
+  const markup = rows.map((row, rowIndex) => {
+    const isHeader = rowIndex === 0 && (row.cells.some(cell => cell.tag === 'th') || /<thead\b/i.test(inner))
+    const rowClass = `detail-mobile-table-row${isHeader ? ' detail-mobile-table-head' : ''}`
+    const cells = Array.from({ length: columnCount }, (_, cellIndex) => row.cells[cellIndex] || { tag: 'td', attrs: '', content: '' }).map((cell, cellIndex) => {
+      const cellClass = `detail-mobile-table-cell${isHeader ? ' detail-mobile-table-head-cell' : ''}`
+      const attrs = responsiveDetailCellAttrs(cell.attrs, cellClass, isHeader, columnWeights[cellIndex])
+      return `<div${attrs}>${normalizeResponsiveDetailCellHtml(cell.content)}</div>`
+    }).join('')
+    return `<div class="${rowClass}" style="display:flex;width:100%;max-width:100%;min-width:0;box-sizing:border-box">${cells}</div>`
+  }).join('')
+  return `<div class="detail-mobile-table" style="display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box;overflow:visible;font-size:11px;line-height:1.35">${caption}${markup}</div>`
+}
+
+function normalizeResponsiveDetailCellHtml(value) {
+  return String(value || '').replace(/<([a-z][\w:-]*)\b([^>]*)>/gi, (tag, name, rawAttrs) => {
+    let attrs = rawAttrs
+      .replace(/\s+(?:width|height|data-colwidth|nowrap)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, '')
+    const styleMatch = attrs.match(/\sstyle\s*=\s*(["'])(.*?)\1/i)
+    if (!styleMatch) return `<${name}${attrs}>`
+    const style = styleMatch[2]
+      .replace(/(^|;)\s*(?:width|min-width|max-width|height|min-height|max-height)\s*:[^;]*/gi, '$1')
+      .replace(/(^|;)\s*white-space\s*:\s*nowrap\b[^;]*/gi, '$1white-space:normal')
+      .replace(/;{2,}/g, ';')
+      .replace(/^;|;$/g, '')
+    return `<${name}${attrs.replace(styleMatch[0], style ? ` style="${style}"` : '')}>`
+  })
+}
+
+function responsiveDetailCellAttrs(rawAttrs, className, isHeader, columnWeight) {
+  let attrs = String(rawAttrs || '')
+    .replace(/\s+(?:width|height|data-colwidth|nowrap|colspan|rowspan)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, '')
+  const classMatch = attrs.match(/\sclass\s*=\s*(["'])(.*?)\1/i)
+  if (classMatch) attrs = attrs.replace(classMatch[0], ` class="${classMatch[2]} ${className}"`)
+  else attrs += ` class="${className}"`
+  const styleMatch = attrs.match(/\sstyle\s*=\s*(["'])(.*?)\1/i)
+  let style = styleMatch ? styleMatch[2] : ''
+  style = style
+    .replace(/(^|;)\s*(?:width|min-width|max-width|height|min-height|max-height|white-space)\s*:[^;]*/gi, '$1')
+    .replace(/;{2,}/g, ';')
+    .replace(/^;|;$/g, '')
+  const defaults = [
+    'display:flex', `flex:${columnWeight} 1 0`, 'min-width:0', 'box-sizing:border-box',
+    'align-items:center', 'justify-content:center', 'padding:6px 2px',
+    'text-align:center', 'white-space:normal', 'word-break:break-all',
+    'overflow-wrap:anywhere', 'line-height:1.35', 'border:1px solid #e6e6e6'
+  ]
+  if (isHeader) defaults.push('font-weight:700')
+  const has = property => new RegExp(`(?:^|;)\\s*${property}\\s*:`, 'i').test(style)
+  defaults.forEach(item => {
+    const property = item.slice(0, item.indexOf(':'))
+    if (!has(property)) style += `${style ? ';' : ''}${item}`
+  })
+  if (styleMatch) return attrs.replace(styleMatch[0], ` style="${style}"`)
+  return `${attrs} style="${style}"`
+}
+
+function normalizeDetailPageTextStyles(html) {
+  let tableDepth = 0
+  return String(html || '').replace(/<(\/?)([a-z][\w:-]*)\b([^>]*)>/gi, (tag, closing, name, attrs) => {
+    const element = name.toLowerCase()
+    if (closing) {
+      if (element === 'table') tableDepth = Math.max(0, tableDepth - 1)
+      return tag
+    }
+    if (element === 'table') tableDepth += 1
+    const tableElement = tableDepth > 0 && /^(table|colgroup|col|thead|tbody|tfoot|tr|th|td)$/.test(element)
+    if (tableElement) {
+      tag = tag.replace(/\s+(?:width|height|data-colwidth|nowrap)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?(?=\s|\/?>)/gi, '')
+      attrs = tag.slice(name.length + 1, -1)
+    }
+    const classMatch = attrs.match(/\bclass\s*=\s*(["'])(.*?)\1/i)
+    const classes = classMatch ? classMatch[2].split(/\s+/) : []
+    const alignClass = classes.find(item => /^content-align-(left|center|right|justify)$/.test(item))
+    const styleMatch = attrs.match(/\sstyle\s*=\s*(["'])(.*?)\1/i)
+    let style = styleMatch ? styleMatch[2].trim().replace(/;?\s*$/, ';') : ''
+    if (tableElement) {
+      style = style.replace(/(^|;)\s*(?:min-width|height|min-height|max-height)\s*:[^;]*/gi, '$1')
+      if (element !== 'table') style = style.replace(/(^|;)\s*(?:width|max-width)\s*:[^;]*(?=;|$)/gi, '$1')
+    }
+    if (tableDepth > 0) style = style.replace(/(white-space\s*:)\s*nowrap\b[^;]*/gi, '$1normal')
+    const additions = []
+    const has = property => new RegExp(`(?:^|;)\\s*${property}\\s*:`, 'i').test(style)
+    const set = (property, value) => {
+      if (has(property)) style = style.replace(new RegExp(`((?:^|;)\\s*${property}\\s*:)[^;]*`, 'gi'), `$1${value}`)
+      else additions.push(`${property}:${value}`)
+    }
+
+    if (alignClass && !has('text-align')) additions.push(`text-align:${alignClass.slice('content-align-'.length)}`)
+    if (classes.includes('content-bold') && !has('font-weight')) additions.push('font-weight:700')
+    if (element === 'img') {
+      if (!has('display')) additions.push('display:block')
+      if (!has('width')) additions.push('width:100%')
+      if (!has('max-width')) additions.push('max-width:100%')
+      if (!has('height')) additions.push('height:auto')
+      if (!has('object-fit')) additions.push('object-fit:contain')
+      if (!has('border-radius')) additions.push('border-radius:2px')
+      if (!has('margin')) additions.push('margin:0 0 18px')
+    } else if (element === 'p') {
+      if (!has('margin')) additions.push('margin:0 0 13px')
+      if (!has('white-space')) additions.push('white-space:pre-wrap')
+      if (!has('overflow-wrap')) additions.push('overflow-wrap:anywhere')
+    } else if (/^h[1-4]$/.test(element)) {
+      if (!has('margin')) additions.push('margin:18px 0 10px')
+      if (!has('color')) additions.push('color:#222')
+      if (!has('line-height')) additions.push('line-height:1.45')
+      if (!has('white-space')) additions.push('white-space:pre-wrap')
+      if (!has('overflow-wrap')) additions.push('overflow-wrap:anywhere')
+    } else if (element === 'ul' || element === 'ol') {
+      if (!has('margin')) additions.push('margin:0 0 14px')
+      if (!has('padding-left')) additions.push('padding-left:22px')
+    } else if (element === 'li') {
+      if (!has('margin')) additions.push('margin:0 0 8px')
+      if (!has('padding-left')) additions.push('padding-left:0')
+    } else if (element === 'table') {
+      set('width', '100%')
+      set('max-width', '100%')
+      set('table-layout', 'fixed')
+      set('margin', '0')
+      set('margin-left', '0')
+      set('margin-right', '0')
+      if (!has('border-collapse')) additions.push('border-collapse:collapse')
+    } else if (element === 'th' || element === 'td') {
+      set('padding', '5px 2px')
+      set('white-space', 'normal')
+      set('word-break', 'break-all')
+      if (!has('border')) additions.push('border:1px solid #e6e6e6')
+      if (!has('text-align')) additions.push('text-align:center')
+      if (!has('line-height')) additions.push('line-height:1.35')
+      if (!has('overflow-wrap')) additions.push('overflow-wrap:anywhere')
+    }
+
+    if (!additions.length && !tableDepth) return tag
+    style += additions.join(';')
+    if (tableDepth) style = style.split(';').map(item => item.trim()).filter(Boolean).join(';')
+    if (!style) return styleMatch ? tag.replace(styleMatch[0], '') : tag
+    if (styleMatch) return tag.replace(styleMatch[0], ` style=${styleMatch[1]}${style}${styleMatch[1]}`)
+    return tag.replace(/\s*\/?>$/, ending => ` style="${style}"${ending}`)
+  })
 }
 
 function normalizeDetailPageImageEntries(value) {
@@ -247,15 +309,23 @@ function replaceDetailPageImageUrls(html, urls) {
   const source = String(html || '')
   return source.replace(/<img\b[^>]*>/gi, tag => {
     const dataIdMatch = tag.match(/\bdata-file-id\s*=\s*["']([^"']+)["']/i)
-    const srcMatch = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i)
+    const srcMatch = tag.match(/\ssrc\s*=\s*["']([^"']+)["']/i)
     const miniSrcMatch = tag.match(/\bdata-mini-src\s*=\s*["']([^"']+)["']/i)
     const fileId = detailPageCloudFileId(dataIdMatch && dataIdMatch[1] || srcMatch && srcMatch[1])
-    const url = (fileId && urls && urls.get(fileId)) || (miniSrcMatch && miniSrcMatch[1])
-    if (!url) return tag.replace(/\s+data-mini-src\s*=\s*["'][^"']*["']/i, '')
-    const escapedUrl = url.replace(/["&<>]/g, char => ({ '"': '&quot;', '&': '&amp;', '<': '&lt;', '>': '&gt;' }[char]))
+    const sourceUrl = srcMatch && decodeDetailPageUrl(srcMatch[1])
+    const miniUrl = miniSrcMatch && decodeDetailPageUrl(miniSrcMatch[1])
+    const url = (fileId && urls && urls.get(fileId)) || miniUrl || (sourceUrl && /^https?:\/\//i.test(sourceUrl) ? sourceUrl : '')
+    if (!url) return tag
+    // WeChat rich-text treats &amp; literally in image URLs instead of decoding
+    // it like a browser HTML document, which invalidates signed CloudBase URLs.
+    const escapedUrl = decodeDetailPageUrl(url).replace(/["<>]/g, char => ({ '"': '&quot;', '<': '&lt;', '>': '&gt;' }[char]))
     const withoutSrc = tag.replace(/\s+src\s*=\s*["'][^"']*["']/i, '').replace(/\s+data-file-id\s*=\s*["'][^"']*["']/i, '').replace(/\s+data-mini-src\s*=\s*["'][^"']*["']/i, '')
     return withoutSrc.replace(/\s*\/?>$/, '') + ` src="${escapedUrl}" />`
   })
+}
+
+function decodeDetailPageUrl(value) {
+  return String(value || '').replace(/&amp;/gi, '&').replace(/&#(?:0*38|x0*26);/gi, '&')
 }
 
 // The web editor emits the results CTA as an anchor with the
@@ -295,12 +365,79 @@ function splitDetailPageResults(html) {
 
 function normalizeDetailPageParts(value) {
   const html = normalizeDetailPageHtml(value)
-  return { html, ...splitDetailPageResults(html) }
+  const parts = splitDetailPageResults(html)
+  return {
+    ...parts,
+    html,
+    segments: splitDetailPageImages(html),
+    beforeSegments: splitDetailPageImages(parts.before),
+    afterSegments: splitDetailPageImages(parts.after)
+  }
+}
+
+function splitDetailPageImages(value) {
+  const source = String(value || '')
+  const tagPattern = /<img\b[^>]*>|<\/?[a-z][\w:-]*\b[^>]*>/gi
+  const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'])
+  const segments = []
+  const stack = []
+  let segmentStack = []
+  let buffer = ''
+  let cursor = 0
+
+  const pushHtml = html => {
+    if (!html) return
+    const text = html.replace(/<[^>]*>/g, '').trim()
+    if (!text && !/<(?:br|hr|img)\b/i.test(html)) return
+    const closing = stack.slice().reverse().map(tag => `</${tag.name}>`).join('')
+    segments.push({ type: 'html', html: `${segmentStack.map(tag => tag.source).join('')}${html}${closing}`, key: segments.length })
+    segmentStack = stack.slice()
+  }
+  const updateStack = tag => {
+    const closing = tag.match(/^<\/([a-z][\w:-]*)\b/i)
+    if (closing) {
+      const name = closing[1].toLowerCase()
+      for (let index = stack.length - 1; index >= 0; index -= 1) {
+        if (stack[index].name === name) { stack.length = index; break }
+      }
+      return
+    }
+    const opening = tag.match(/^<([a-z][\w:-]*)\b/i)
+    if (!opening) return
+    const name = opening[1].toLowerCase()
+    if (!voidTags.has(name) && !/\/\s*>$/.test(tag)) stack.push({ name, source: tag })
+  }
+
+  let match
+  while ((match = tagPattern.exec(source))) {
+    buffer += source.slice(cursor, match.index)
+    const tag = match[0]
+    if (/^<img\b/i.test(tag) && !stack.some(item => /^(?:table|thead|tbody|tfoot|tr|td|th)$/.test(item.name))) {
+      const srcMatch = tag.match(/\b(?:src|data-mini-src|data-file-id)\s*=\s*(["'])(.*?)\1/i)
+      if (srcMatch && srcMatch[2]) {
+        pushHtml(buffer)
+        const altMatch = tag.match(/\balt\s*=\s*(["'])(.*?)\1/i)
+        segments.push({ type: 'image', src: decodeDetailPageUrl(srcMatch[2]), alt: altMatch ? altMatch[2] : '', key: segments.length })
+        buffer = ''
+        segmentStack = stack.slice()
+      } else {
+        buffer += tag
+      }
+    } else {
+      buffer += tag
+      updateStack(tag)
+    }
+    cursor = tagPattern.lastIndex
+  }
+  buffer += source.slice(cursor)
+  pushHtml(buffer)
+  if (!segments.length && source) segments.push({ type: 'html', html: source, key: 0 })
+  return segments
 }
 
 function normalizeContentBlocks(value) {
   if (!Array.isArray(value)) return []
-  if (value.length > 100) throw new Error('赛事正文超过 100 项，拒绝不完整显示')
+  if (value.length > 1000) throw new Error('赛事正文超过 1000 项，拒绝不完整显示')
   const supportedTypes = new Set(['heading', 'paragraph', 'text', 'note', 'image', 'banner', 'divider', 'list', 'table'])
   const normalizedBlocks = value.reduce((blocks, block, index) => {
     if (!block || typeof block !== 'object' || Array.isArray(block)) throw new Error(`赛事正文第 ${index + 1} 项格式无效`)
@@ -333,7 +470,11 @@ function normalizeContentBlocks(value) {
       key: String(block.id || index),
       type,
       text,
-      html: typeof block.html === 'string' ? block.html.slice(0, 30000) : '',
+      // The web editor may serialize verbose inline styles for a long but
+      // otherwise valid paragraph. The API accepts rich HTML up to 500 KB;
+      // silently cutting it at 30 KB can leave broken tags and flatten the
+      // rest of the published article in wx:rich-text.
+      html: typeof block.html === 'string' ? block.html.slice(0, 500000) : '',
       align: ['left', 'center', 'right', 'justify'].includes(String(block.align)) ? String(block.align) : 'left',
       bold: block.bold === true,
       listStyle: block.listStyle === 'ordered' ? 'ordered' : 'unordered',
@@ -343,6 +484,9 @@ function normalizeContentBlocks(value) {
       title: String(block.title || ''),
       src: url,
       fileId: String(block.fileId || '')
+    }
+    if (type === 'table') {
+      Object.assign(normalized, normalizePrizeTableColors(normalized))
     }
     const stageImageHtml = !normalized.text.trim() && ['paragraph', 'text', 'note'].includes(type)
       ? String(block.html || '').match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']*stage-01(?:\.jpg)?(?:[?#][^"']*)?)["'][^>]*\/?>/i)
@@ -386,18 +530,23 @@ function normalizeContentBlocks(value) {
   return withoutStage01Banner
 }
 
-function normalizeSignupOptions(value) {
+function normalizeSignupOptions(value, registrationEnabled = false) {
   if (!Array.isArray(value)) return []
   if (value.length > 100) throw new Error('报名选项超过 100 项，拒绝不完整显示')
   if (value.some(item => !item || typeof item !== 'object' || Array.isArray(item))) throw new Error('报名选项格式无效')
   return value.map(item => {
     const name = String(item.name || '').trim()
-    const fee = String(item.fee || '').trim()
-    const quota = String(item.quota || '').trim()
+    const rawFee = String(item.fee ?? '0').trim().replace(/\/车\s*$/, '/辆')
+    const feeAmount = rawFee ? (rawFee.startsWith('¥') || rawFee.startsWith('￥') ? rawFee.replace(/^￥/, '¥') : `¥ ${rawFee}`) : ''
+    const configuredUnit = String(item.unit || '').trim()
+    const feeUnit = configuredUnit === '车' ? '辆' : configuredUnit || (/(?:场地赛|攀爬赛|女子组|专业组|新秀组)/.test(name) ? '人' : '辆')
+    const fee = feeAmount && !/\/[^/]+$/.test(feeAmount) ? `${feeAmount}/${feeUnit}` : feeAmount
     const note = String(item.note || '').trim()
+    const registeredCount = Number.isFinite(Number(item.registeredCount)) && Number(item.registeredCount) >= 0 ? Math.floor(Number(item.registeredCount)) : 0
+    const countNote = registrationEnabled === true ? `（已报${registeredCount}${feeUnit}）` : ''
     return {
       ...item,
-      displayText: `${name}${fee ? ` ${fee}` : ''}${quota ? `（名额：${quota}）` : ''}${note ? `（${note}）` : ''}`
+      displayText: `${name}${fee ? ` ${fee}` : ''}${countNote}${note && !/^已报\s*\d+/.test(note) ? `（${note}）` : ''}`
     }
   })
 }
@@ -410,7 +559,8 @@ Page({
     event: {
       id: 'suiping', title: '', date: '', status: '', notice: '', dateFull: '', location: '', signup: [], sectionTitles: eventSectionTitles(),
       infoLabels: eventInfoLabels(), contentBlocks: [], detailPageConfigured: false, detailPageHtml: '',
-      detailPageBeforeHtml: '', detailPageAfterHtml: '', detailPageHasResultsAction: false, detailPageResultsLabel: ''
+      detailPageBeforeHtml: '', detailPageAfterHtml: '', detailPageSegments: [], detailPageBeforeSegments: [], detailPageAfterSegments: [],
+      detailPageHasResultsAction: false, detailPageResultsLabel: ''
     },
     prizeTables: [], event2PrizeTables: [], event3PrizeTables: [],
     liked: false, likeCount: 0, commentCount: 0, shareCount: 0, viewCount: 0,
@@ -456,11 +606,12 @@ Page({
     }
     if (query.fromShare) this.recordShareOpen(query.fromShare)
   },
-  loadPublishedEvent(id) {
+  loadPublishedEvent(id, silent) {
+    if (this._eventLoading) return this._eventLoading
     const requestId = (this._eventRequestId || 0) + 1
     this._eventRequestId = requestId
-    this.safeSetData({ eventConfigError: '', eventCloudReady: false, canAccessWork: false })
-    container.call('/api/public/events').then(readEventList).then(events => {
+    if (!silent) this.safeSetData({ eventConfigError: '', eventCloudReady: false, canAccessWork: false })
+    this._eventLoading = container.call('/api/public/events').then(readEventList).then(events => {
       if (this.__unloaded || this._eventRequestId !== requestId) return
       const record = events.find(item => String(item && (item.id || item._id) || '') === String(id))
       if (!record) {
@@ -469,7 +620,8 @@ Page({
         // The old page remains available only when the network request itself
         // fails (see catch below), so an offline user can still view cached UI.
         this.safeSetData({
-          event: { ...(this.data.event || {}), id: String(id), title: '', date: '', location: '', status: '', signup: [], contentBlocks: [] },
+          event: { id: String(id), title: '', date: '', location: '', status: '', signup: [], signupOptions: [], contentBlocks: [], registrationEnabled: false },
+          registrationPanel: '',
           detailReady: false,
           eventConfigReady: true,
           eventCloudReady: false,
@@ -507,6 +659,9 @@ Page({
         detailPageHtml: detailPage.html,
         detailPageBeforeHtml: detailPage.before,
         detailPageAfterHtml: detailPage.after,
+        detailPageSegments: detailPage.segments,
+        detailPageBeforeSegments: detailPage.beforeSegments,
+        detailPageAfterSegments: detailPage.afterSegments,
         detailPageHasResultsAction: detailPage.hasResultsAction,
         detailPageResultsLabel: detailPage.resultsLabel,
         detailPageImages: normalizeDetailPageImageEntries(record.detailPageImages),
@@ -518,7 +673,7 @@ Page({
         contactPhone: String(record.contactPhone || ''),
         contactWechat: String(record.contactWechat || ''),
         registrationNote: String(record.registrationNote || ''),
-        signupOptions: normalizeSignupOptions(record.signupOptions),
+        signupOptions: normalizeSignupOptions(record.signupOptions, record.registrationEnabled),
         registrationEnabled: record.registrationEnabled === true,
         workBackendEnabled: record.workBackendEnabled !== false,
         groups: Array.isArray(record.groups) ? record.groups : [],
@@ -534,7 +689,8 @@ Page({
         isGeneric: true
       }
       if (publishedEvent.id === 'suiping') this.safeSetData({ detailReady: false })
-      this.safeSetData({ eventConfigReady: true, eventCloudReady: true })
+      this.safeSetData({ eventConfigReady: true, eventCloudReady: true, eventConfigError: '' })
+      if (!publishedEvent.registrationEnabled) this.safeSetData({ registrationPanel: '' })
       if (!publishedEvent.workBackendEnabled) this.safeSetData({ canAccessWork: false })
       // Publish the full record before resolving temporary image URLs. The
       // cover and body image requests can finish in either order.
@@ -544,6 +700,8 @@ Page({
       this.resolveEventDetailPageImages(publishedEvent)
       this.loadWorkAccess()
     }).catch(error => {
+      if (this.__unloaded || this._eventRequestId !== requestId) return
+      this.safeSetData({ eventCloudReady: false, canAccessWork: false, registrationPanel: '' })
       // Legacy detail content can remain visible offline, but work access
       // stays closed until the current cloud event has been verified.
       console.warn('读取赛事详情失败，继续显示内置内容', error)
@@ -553,7 +711,8 @@ Page({
       } else {
         this.safeSetData({ eventConfigReady: true, eventConfigError: '赛事详情读取失败，请检查网络后重试。' })
       }
-    })
+    }).finally(() => { this._eventLoading = null })
+    return this._eventLoading
   },
   loadPublishedResults(eventId) {
     const requestId = (this._scoreRequestId || 0) + 1
@@ -678,6 +837,9 @@ Page({
         detailPageHtml: detailPage.html,
         detailPageBeforeHtml: detailPage.before,
         detailPageAfterHtml: detailPage.after,
+        detailPageSegments: detailPage.segments,
+        detailPageBeforeSegments: detailPage.beforeSegments,
+        detailPageAfterSegments: detailPage.afterSegments,
         detailPageHasResultsAction: detailPage.hasResultsAction,
         detailPageResultsLabel: detailPage.resultsLabel
       } })
@@ -700,8 +862,77 @@ Page({
     this.loadPublishedEvent(this.data.id)
   },
   onShow() {
-    if (!this.data.event || !this.data.event.id) return
-    this.loadWorkAccess()
+    this._detailVisible = true
+    if (!normalizeEventId(this.data.id)) return
+    this.refreshPublishedEvent()
+  },
+  refreshPublishedEvent() {
+    if (!this._detailVisible || this.__unloaded) return
+    if (this._publicationTimer) clearTimeout(this._publicationTimer)
+    return this.loadPublishedEvent(this.data.id, true).finally(() => {
+      if (this._publicationTimer) clearTimeout(this._publicationTimer)
+      if (this._detailVisible && !this.__unloaded) this._publicationTimer = setTimeout(() => this.refreshPublishedEvent(), 10000)
+    })
+  },
+  onHide() {
+    this._detailVisible = false
+    if (this._publicationTimer) clearTimeout(this._publicationTimer)
+    this._publicationTimer = null
+  },
+  async openRegistration() {
+    if (!this.data.eventCloudReady || !this.data.event || this.data.event.registrationEnabled !== true) return
+    if (!auth.getUser()) { wx.navigateTo({ url: '/pages/login/login?from=profile' }); return }
+    const options = (this.data.event.signupOptions || []).filter(option => option.registrationEnabled !== false)
+    if (!options.length) { wx.showToast({ title: '暂无开放报名的组别', icon: 'none' }); return }
+    this._registrationRequestId = this._registrationRequestId || ('signup_'+Date.now()+'_'+Math.random().toString(36).slice(2,14))
+    this.safeSetData({ registrationPanel: 'form', registrationError: '', registrationRole: 'driver', registrationGroups: options.map(option=>option.name), registrationForm: this.data.registrationForm || { 组别: options[0].name }, registrationFields: ['姓名','赛号','车队','车型','排量','颜色','身份证','手机号','血型','国籍'], navigatorFields: ['领航员姓名','领航员身份证','领航员手机号','领航员血型','领航员国籍'] })
+    try {
+      const result = await this.callRegistration('getRegistrationProfiles')
+      this.safeSetData({ registrationProfiles: result.profiles || [], registrationProfileNames: (result.profiles || []).map(row=>row.姓名+' / '+(row.赛号 || '未填车号')) })
+    } catch (error) { this.safeSetData({ registrationError: error.message }) }
+  },
+  callRegistration(action, data) {
+    return this.callInteraction(action, data).then(result=>{
+      if (String(result.eventId || '') !== String(this.data.id)) throw new Error('报名响应赛事不一致，请重试')
+      return result
+    })
+  },
+  changeRegistrationField(event) {
+    const field = event.currentTarget.dataset.field
+    const allowed = [...(this.data.registrationFields || []), ...(this.data.navigatorFields || [])]
+    if (!allowed.includes(field)) return
+    this.safeSetData({ registrationForm: { ...this.data.registrationForm, [field]: event.detail.value } })
+  },
+  changeRegistrationGroup(event) {
+    const group = (this.data.registrationGroups || [])[Number(event.detail.value)]
+    if (group) this.safeSetData({ registrationForm: { ...this.data.registrationForm, 组别: group } })
+  },
+  changeRegistrationRole(event) { this.safeSetData({ registrationRole: event.currentTarget.dataset.role }) },
+  chooseRegistrationProfile(event) {
+    const profile = (this.data.registrationProfiles || [])[Number(event.detail.value)]
+    if (profile) this.safeSetData({ registrationForm: { ...this.data.registrationForm, ...profile } })
+  },
+  closeRegistration() { if (!this.data.registrationSubmitting) this.safeSetData({ registrationPanel: '' }) },
+  async openSignupList() {
+    if (!this.data.eventCloudReady || !this.data.event || this.data.event.registrationEnabled !== true) return
+    this.safeSetData({ registrationPanel: 'list', registrationError: '', registrationListLoading: true })
+    try {
+      const result = await this.callRegistration('listRegistrations')
+      this.safeSetData({ registrationRows: result.rows || [] })
+    } catch (error) { this.safeSetData({ registrationError: error.message }) }
+    finally { this.safeSetData({ registrationListLoading: false }) }
+  },
+  async submitRegistration() {
+    if (this.data.registrationSubmitting || this.data.registrationPanel !== 'form') return
+    this.safeSetData({ registrationSubmitting: true, registrationError: '' })
+    try {
+      await this.callRegistration('submitRegistration', { form: this.data.registrationForm, requestId: this._registrationRequestId })
+      this._registrationRequestId = null
+      this.safeSetData({ registrationForm: null })
+      wx.showToast({ title: '报名成功', icon: 'success' })
+      await this.openSignupList()
+    } catch (error) { this.safeSetData({ registrationError: error.message || '报名失败，请重试' }) }
+    finally { this.safeSetData({ registrationSubmitting: false }) }
   },
   hasWorkAccess(user) {
     if (!user) return false
@@ -722,6 +953,21 @@ Page({
   openResults() {
     wx.setNavigationBarTitle({ title: '成绩详情' })
     this.setData({ resultsSheetVisible: true, scoreViewVisible: false, selectedScore: null })
+  },
+  previewDetailImage(event) {
+    const current = String(event && event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.src || '').trim()
+    if (!current) return
+    const eventData = this.data.event || {}
+    const urls = [
+      ...(Array.isArray(eventData.detailPageBeforeSegments) ? eventData.detailPageBeforeSegments : []),
+      ...(Array.isArray(eventData.detailPageSegments) ? eventData.detailPageSegments : []),
+      ...(Array.isArray(eventData.detailPageAfterSegments) ? eventData.detailPageAfterSegments : [])
+    ].filter(item => item && item.type === 'image' && item.src).map(item => String(item.src))
+    wx.previewImage({ current, urls: [...new Set([current, ...urls])] })
+  },
+  previewStandaloneImage(event) {
+    const current = String(event && event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.src || '').trim()
+    if (current) wx.previewImage({ current, urls: [current] })
   },
   closeResults() {
     wx.setNavigationBarTitle({ title: '赛事详情' })
@@ -765,6 +1011,8 @@ Page({
         id: String(row.id || row.carNumber || Math.random()),
         carNumber: String(row.carNumber || ''),
         group: String(row.group || ''),
+        driver: String(row.driver || row.driverName || row.name || ''),
+        coDriver: String(row.coDriver || row.navigator || row.coDriverName || ''),
         rank: row.rank === undefined || row.rank === null ? '' : String(row.rank),
         stageValues,
         validScore: this.displayScoreValue(row.validScore || (row.totalScore)),
@@ -943,6 +1191,7 @@ Page({
     return { title: event.title || '赛事详情', query: 'id=' + (this.data.id || 'suiping') + '&fromShare=timeline' }
   },
   onUnload() {
+    this.onHide()
     this.__unloaded = true
     this.__viewToken = (this.__viewToken || 0) + 1
     if (this._detailTimer) clearTimeout(this._detailTimer)
@@ -1011,6 +1260,19 @@ Page({
   },
   makePrizeTables() {
     const rows = (values) => values.map((value, index) => [`第${['一','二','三','四','五','六','七','八','九','十'][index]}名`, value])
+    const openGroupRows = [
+      ['第一名','20000','第一名','20000','第一名','20000','第一名','20000'],
+      ['第二名','10000','第二名','10000','第二名','10000','第二名','10000'],
+      ['第三名','5000','第三名','5000','第三名','5000','第三名','5000'],
+      ['第四名','4000','第四名','4000','第四名','4000','第四名','4000'],
+      ['第五名','3000','第五名','3000','第五名','3000','第五名','3000'],
+      ['第六名','2000','第六名','2000','第六名','2000','第六名','2000'],
+      ['第七名','1000','第七名','1000','第七名','1000','第七名','1000'],
+      ['第八名','1000','第八名','1000','第八名','1000','第八名','1000'],
+      ['第九名','1000','第九名','1000','第九名','1000','第九名','1000'],
+      ['第十名','1000','第十名','1000','第十名','1000','第十名','1000']
+    ]
+    const openGroupSubtotals = ['小计：48000元','小计：48000元','小计：48000元','小计：48000元']
     const stage = (title, theme, columns, totals) => {
       const max = Math.max.apply(null, columns.map((column) => column.length))
       const tableRows = Array.from({ length: max }, (_, index) => columns.reduce((cells, column) => cells.concat(column[index] || ['--', '--']), []))
@@ -1022,20 +1284,11 @@ Page({
         type: 'open-groups',
         title: '坦克汽车（定向集结赛）奖金设置 19.2万元',
         theme: 'blue',
-        groups: ['公开A组', '公开B组', '公开C组', '公开D组'],
-        rows: [
-          ['第一名','20000','第一名','20000','第一名','20000','第一名','20000'],
-          ['第二名','10000','第二名','10000','第二名','10000','第二名','10000'],
-          ['第三名','5000','第三名','5000','第三名','5000','第三名','5000'],
-          ['第四名','4000','第四名','4000','第四名','4000','第四名','4000'],
-          ['第五名','3000','第五名','3000','第五名','3000','第五名','3000'],
-          ['第六名','2000','第六名','2000','第六名','2000','第六名','2000'],
-          ['第七名','1000','第七名','1000','第七名','1000','第七名','1000'],
-          ['第八名','1000','第八名','1000','第八名','1000','第八名','1000'],
-          ['第九名','1000','第九名','1000','第九名','1000','第九名','1000'],
-          ['第十名','1000','第十名','1000','第十名','1000','第十名','1000']
-        ],
-        subtotals: ['小计：48000元','小计：48000元','小计：48000元','小计：48000元']
+        rows: openGroupRows,
+        groups: ['公开A组', '公开B组', '公开C组', '公开D组'].map((name, groupIndex) => ({
+          name,
+          subtotal: openGroupSubtotals[groupIndex]
+        }))
       },
       stage('场地越野赛（专业组）奖金设置 11.5万元', 'orange', [rows(['5000','3000','1000']), rows(['10000','5000','4000','3000','2000','1000']), rows(['30000','20000','10000','6000','5000','4000','3000','2000','1000'])], ['小计：9000元','小计：25000元','小计：81000元']),
       stage('场地越野赛（公开组）奖金设置 8.5万元', 'maroon', [rows(['3000','2000','1000']), rows(['6000','5000','4000','3000','2000','1000']), rows(['20000','10000','7000','6000','5000','4000','3000','2000','1000'])], ['小计：6000元','小计：21000元','小计：58000元']),

@@ -1,3 +1,13 @@
+<template name="registration-actions">
+  <block wx:if="{{event.registrationEnabled}}">
+    <button class="primary-btn" bindtap="openRegistration">立即报名</button>
+    <button class="outline-btn" bindtap="openSignupList">查看报名列表</button>
+  </block>
+  <block wx:else>
+    <button class="primary-btn" bindtap="openResults">查看成绩详情</button>
+    <button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button>
+  </block>
+</template>
 <view class="detail-page-root">
   <scroll-view class="detail-scroll" scroll-y show-scrollbar="false">
     <view wx:if="{{eventConfigError}}" class="event-load-error">
@@ -5,16 +15,20 @@
       <button class="event-load-retry" bindtap="retryPublishedEvent">重试读取</button>
     </view>
     <view class="detail-content">
-      <block wx:if="{{event && event.detailPageConfigured && event.detailPageHtml}}">
-        <rich-text wx:if="{{event.detailPageBeforeHtml}}" class="detail-page-rich-text" nodes="{{event.detailPageBeforeHtml}}"></rich-text>
+      <block wx:if="{{event && event.detailPageConfigured && event.detailPageHtml && !event.detailPageBodyOnly}}">
+        <block wx:for="{{event.detailPageBeforeSegments}}" wx:for-item="detailPart" wx:key="key">
+          <rich-text wx:if="{{detailPart.type === 'html' && detailPart.html}}" class="detail-page-rich-text" nodes="{{detailPart.html}}"></rich-text>
+          <image wx:elif="{{detailPart.type === 'image' && detailPart.src}}" class="detail-page-image" src="{{detailPart.src}}" mode="widthFix" lazy-load="true" data-src="{{detailPart.src}}" bindtap="previewDetailImage" />
+        </block>
         <view wx:if="{{event.detailPageHasResultsAction}}" class="action-row detail-entry-actions detail-page-results-action">
-          <button class="primary-btn" bindtap="openResults">{{event.detailPageResultsLabel || event.sectionTitles.results || '查看成绩详情'}}</button>
-          <button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button>
+          <template is="registration-actions" data="{{event,canAccessWork}}" />
         </view>
-        <rich-text wx:if="{{event.detailPageAfterHtml}}" class="detail-page-rich-text" nodes="{{event.detailPageAfterHtml}}"></rich-text>
+        <block wx:for="{{event.detailPageAfterSegments}}" wx:for-item="detailPart" wx:key="key">
+          <rich-text wx:if="{{detailPart.type === 'html' && detailPart.html}}" class="detail-page-rich-text" nodes="{{detailPart.html}}"></rich-text>
+          <image wx:elif="{{detailPart.type === 'image' && detailPart.src}}" class="detail-page-image" src="{{detailPart.src}}" mode="widthFix" lazy-load="true" data-src="{{detailPart.src}}" bindtap="previewDetailImage" />
+        </block>
         <view wx:if="{{!event.detailPageHasResultsAction}}" class="action-row detail-entry-actions detail-page-fallback-actions">
-          <button class="primary-btn" bindtap="openResults">{{event.sectionTitles.results || '查看成绩详情'}}</button>
-          <button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button>
+          <template is="registration-actions" data="{{event,canAccessWork}}" />
         </view>
       </block>
       <block wx:else>
@@ -45,7 +59,7 @@
         </view>
       </view>
 
-      <view class="action-row detail-entry-actions"><button class="primary-btn" bindtap="openResults">{{event.sectionTitles.results || '查看成绩详情'}}</button><button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button></view>
+      <view class="action-row detail-entry-actions"><template is="registration-actions" data="{{event,canAccessWork}}" /></view>
 
       <view wx:if="{{event.isGeneric}}" class="section info-section generic-event-info">
         <view class="section-title">{{event.sectionTitles.info || '赛事信息'}}</view>
@@ -66,22 +80,72 @@
         <view class="info-line"><text class="info-label">{{event.infoLabels.wechat || '微信号：'}}</text><text>13269191919</text></view>
       </view>
 
-      <view wx:if="{{event && event.isDynamic && (event.coverUrl || event.detailText || (event.contentBlocks && event.contentBlocks.length))}}" class="section generic-copy-section">
+      <view wx:if="{{event && event.isDynamic && (event.detailPageBodyOnly || event.coverUrl || event.detailText || (event.contentBlocks && event.contentBlocks.length))}}" class="section generic-copy-section">
         <view class="section-title">{{event.sectionTitles.detail || '赛事详情'}}</view>
-        <image wx:if="{{event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" />
-        <view wx:if="{{event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
-        <block wx:if="{{event.contentBlocks && event.contentBlocks.length}}" wx:for="{{event.contentBlocks}}" wx:for-item="contentBlock" wx:key="key">
+        <block wx:if="{{event.detailPageBodyOnly}}" wx:for="{{event.detailPageSegments}}" wx:for-item="detailPart" wx:key="key">
+          <rich-text wx:if="{{detailPart.type === 'html' && detailPart.html}}" class="detail-page-rich-text" nodes="{{detailPart.html}}"></rich-text>
+          <image wx:elif="{{detailPart.type === 'image' && detailPart.src}}" class="detail-page-image" src="{{detailPart.src}}" mode="widthFix" lazy-load="true" data-src="{{detailPart.src}}" bindtap="previewDetailImage" />
+        </block>
+        <image wx:if="{{!event.detailPageBodyOnly && event.coverUrl}}" class="detail-poster generic-detail-poster" src="{{event.coverUrl}}" mode="widthFix" lazy-load="true" data-src="{{event.coverUrl}}" bindtap="previewStandaloneImage" />
+        <view wx:if="{{!event.detailPageBodyOnly && event.detailText}}" class="prose generic-detail-copy">{{event.detailText}}</view>
+        <block wx:if="{{!event.detailPageBodyOnly && event.contentBlocks && event.contentBlocks.length}}" wx:for="{{event.contentBlocks}}" wx:for-item="contentBlock" wx:key="key">
           <rich-text wx:if="{{contentBlock.type === 'heading' && contentBlock.html}}" class="sub-title content-block-heading align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}" nodes="{{contentBlock.html}}"></rich-text>
           <view wx:elif="{{contentBlock.type === 'heading'}}" class="sub-title content-block-heading align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">{{contentBlock.text}}</view>
           <rich-text wx:elif="{{(contentBlock.type === 'paragraph' || contentBlock.type === 'text') && contentBlock.html}}" class="prose generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}" nodes="{{contentBlock.html}}"></rich-text>
           <view wx:elif="{{contentBlock.type === 'paragraph' || contentBlock.type === 'text'}}" class="prose generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">{{contentBlock.text}}</view>
           <rich-text wx:elif="{{contentBlock.type === 'note' && contentBlock.html}}" class="prose note generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}" nodes="{{contentBlock.html}}"></rich-text>
           <view wx:elif="{{contentBlock.type === 'note'}}" class="prose note generic-detail-copy align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">{{contentBlock.text}}</view>
-          <image wx:elif="{{contentBlock.type === 'image' && contentBlock.src}}" class="detail-poster content-block-image" src="{{contentBlock.src}}" mode="widthFix" lazy-load="true" />
+          <image wx:elif="{{contentBlock.type === 'image' && contentBlock.src}}" class="detail-poster content-block-image" src="{{contentBlock.src}}" mode="widthFix" lazy-load="true" data-src="{{contentBlock.src}}" bindtap="previewStandaloneImage" />
           <view wx:elif="{{contentBlock.type === 'banner'}}" class="stage-banner stage-banner-{{contentBlock.theme}}"><view class="stage-brand">赛车视界<text>RACING VIEW</text></view><text class="stage-banner-title">{{contentBlock.text}}</text><text class="stage-number">{{contentBlock.number}}</text></view>
           <view wx:elif="{{contentBlock.type === 'divider'}}" class="separator content-block-divider"></view>
           <view wx:elif="{{contentBlock.type === 'list'}}" class="content-block-list {{contentBlock.listStyle === 'ordered' ? 'content-block-list-ordered' : 'content-block-list-unordered'}} align-{{contentBlock.align}} {{contentBlock.bold ? 'content-bold' : ''}}">
             <view wx:for="{{contentBlock.items}}" wx:for-item="listItem" wx:key="index" class="prose numbered content-block-list-item">{{listItem}}</view>
+          </view>
+          <view wx:elif="{{contentBlock.type === 'table' && contentBlock.prizeMobileLayout && contentBlock.prizeMobileLayout.type === 'stages'}}" class="mobile-prize-table" style="border-color:{{contentBlock.totalColor}};color:{{contentBlock.textColor}}">
+            <view wx:if="{{contentBlock.title}}" class="mobile-prize-title" style="background-color:{{contentBlock.titleColor}};color:{{contentBlock.titleTextColor}}">{{contentBlock.title}}</view>
+            <view class="mobile-prize-stage-head-row" style="background-color:{{contentBlock.headerColor}};color:{{contentBlock.textColor}}">
+              <view wx:for="{{contentBlock.prizeMobileLayout.groups}}" wx:for-item="prizeStage" wx:key="index" class="mobile-prize-stage-head">{{prizeStage.label}}</view>
+            </view>
+            <view wx:for="{{contentBlock.prizeMobileLayout.rows}}" wx:for-item="prizeRow" wx:key="index" class="mobile-prize-data-row {{prizeRow.isTotal ? 'mobile-prize-total-row' : ''}}">
+              <view wx:for="{{prizeRow.groups}}" wx:for-item="prizePair" wx:key="index" class="mobile-prize-stage-pair">
+                <view wx:if="{{prizePair.totalText}}" class="mobile-prize-total-cell" style="background-color:{{contentBlock.totalColor}};color:{{contentBlock.totalTextColor}}">{{prizePair.totalText}}</view>
+                <block wx:else>
+                  <view class="mobile-prize-cell" style="background-color:{{prizePair.rowColor || contentBlock.bodyColor}};color:{{contentBlock.textColor}}">{{prizePair.rank}}</view>
+                  <view class="mobile-prize-cell mobile-prize-amount" style="background-color:{{prizePair.rowColor || contentBlock.bodyColor}};color:{{contentBlock.textColor}}">{{prizePair.prize}}</view>
+                </block>
+              </view>
+            </view>
+          </view>
+          <view wx:elif="{{contentBlock.type === 'table' && contentBlock.prizeMobileLayout && contentBlock.prizeMobileLayout.type === 'matrix'}}" class="mobile-prize-table mobile-prize-matrix" style="border-color:{{contentBlock.totalColor}};color:{{contentBlock.textColor}}">
+            <view wx:if="{{contentBlock.title}}" class="mobile-prize-title" style="background-color:{{contentBlock.titleColor}};color:{{contentBlock.titleTextColor}}">{{contentBlock.title}}</view>
+            <view class="mobile-prize-matrix-head-row" style="background-color:{{contentBlock.headerColor}};color:{{contentBlock.textColor}}">
+              <view wx:for="{{contentBlock.prizeMobileLayout.groups}}" wx:for-item="prizeGroup" wx:key="label" class="mobile-prize-matrix-head">{{prizeGroup.label}}</view>
+            </view>
+            <view wx:for="{{contentBlock.prizeMobileLayout.rows}}" wx:for-item="prizeRow" wx:key="index" class="mobile-prize-matrix-row">
+              <view wx:for="{{prizeRow.groups}}" wx:for-item="prizePair" wx:key="index" class="mobile-prize-matrix-pair">
+                <view wx:if="{{prizePair.totalText}}" class="mobile-prize-matrix-total" style="background-color:{{contentBlock.totalColor}};color:{{contentBlock.totalTextColor}}">{{prizePair.totalText}}</view>
+                <block wx:else>
+                  <view class="mobile-prize-matrix-cell" style="background-color:{{prizePair.rowColor || contentBlock.bodyColor}};color:{{contentBlock.textColor}}">{{prizePair.rank}}</view>
+                  <view class="mobile-prize-matrix-cell" style="background-color:{{prizePair.rowColor || contentBlock.bodyColor}};color:{{contentBlock.textColor}}">{{prizePair.prize}}</view>
+                </block>
+              </view>
+            </view>
+          </view>
+          <view wx:elif="{{contentBlock.type === 'table' && contentBlock.prizeMobileLayout && contentBlock.prizeMobileLayout.type === 'groups'}}" class="mobile-prize-groups">
+            <view wx:if="{{contentBlock.title}}" class="mobile-prize-collection-title">{{contentBlock.title}}</view>
+            <block wx:for="{{contentBlock.prizeMobileLayout.groups}}" wx:for-item="prizeGroup" wx:key="label">
+              <view class="mobile-prize-table mobile-prize-group-table" style="border-color:{{prizeGroup.titleColor}};color:{{prizeGroup.textColor}}">
+                <view class="mobile-prize-title" style="background-color:{{prizeGroup.titleColor}};color:{{prizeGroup.totalTextColor}}">{{prizeGroup.label}}</view>
+                <view class="mobile-prize-stage-head-row" style="background-color:{{prizeGroup.headerColor}};color:{{prizeGroup.textColor}}"><view class="mobile-prize-stage-head">名次</view><view class="mobile-prize-stage-head">奖金</view></view>
+                <view wx:for="{{prizeGroup.rows}}" wx:for-item="prizeRow" wx:key="index" class="mobile-prize-data-row {{prizeRow.isTotal ? 'mobile-prize-total-row' : ''}}">
+                  <view wx:if="{{prizeRow.totalText}}" class="mobile-prize-group-total" style="background-color:{{prizeGroup.totalColor}};color:{{prizeGroup.totalTextColor}}">{{prizeRow.totalText}}</view>
+                  <block wx:else>
+                    <view class="mobile-prize-cell" style="background-color:{{prizeRow.rowColor}};color:{{prizeGroup.textColor}}">{{prizeRow.rank}}</view>
+                    <view class="mobile-prize-cell mobile-prize-amount" style="background-color:{{prizeRow.rowColor}};color:{{prizeGroup.textColor}}">{{prizeRow.prize}}</view>
+                  </block>
+                </view>
+              </view>
+            </block>
           </view>
           <view wx:elif="{{contentBlock.type === 'table'}}" class="prize-block content-block-table">
             <view wx:if="{{contentBlock.title}}" class="prize-title">{{contentBlock.title}}</view>
@@ -139,16 +203,18 @@
 
         <view class="sub-title">（四）奖金设置</view>
         <block wx:for="{{prizeTables}}" wx:for-item="prize" wx:for-index="prizeIndex" wx:key="title">
-          <view wx:if="{{prize.type === 'open-groups'}}" class="prize-block prize-{{prize.theme}}">
-            <view class="prize-title">{{prize.title}}</view>
-            <view class="group-head-row">
-              <view wx:for="{{prize.groups}}" wx:for-item="group" wx:key="*this" class="group-head">{{group}}</view>
-            </view>
-            <view wx:for="{{prize.rows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="*this" class="prize-row">
-              <view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex" class="prize-cell">{{cell}}</view>
-            </view>
-            <view class="prize-total-row">
-              <view wx:for="{{prize.subtotals}}" wx:for-item="subtotal" wx:key="*this" class="prize-total">{{subtotal}}</view>
+          <view wx:if="{{prize.type === 'open-groups'}}" class="prize-collection">
+            <view class="prize-block prize-blue prize-four-group">
+              <view class="prize-title">{{prize.title}}</view>
+              <view class="prize-four-group-head-row">
+                <view wx:for="{{prize.groups}}" wx:for-item="group" wx:key="name" class="prize-four-group-head">{{group.name}}</view>
+              </view>
+              <view wx:for="{{prize.rows}}" wx:for-item="row" wx:for-index="rowIndex" wx:key="index" class="prize-four-group-row {{rowIndex % 2 ? 'is-striped' : ''}}">
+                <view wx:for="{{row}}" wx:for-item="cell" wx:for-index="cellIndex" wx:key="cellIndex" class="prize-four-group-cell">{{cell}}</view>
+              </view>
+              <view class="prize-four-group-total-row">
+                <view wx:for="{{prize.groups}}" wx:for-item="group" wx:key="name" class="prize-four-group-total">{{group.subtotal}}</view>
+              </view>
             </view>
           </view>
           <view wx:else class="prize-block prize-{{prize.theme}}">
@@ -255,6 +321,28 @@
     </view>
   </view>
 
+  <view wx:if="{{registrationPanel}}" class="registration-mask" catchtap="closeRegistration">
+    <view class="registration-panel" catchtap="stopSheetTap">
+      <view class="registration-header"><text>{{registrationPanel === 'form' ? '赛事报名' : '报名列表'}}</text><button bindtap="closeRegistration" disabled="{{registrationSubmitting}}">×</button></view>
+      <scroll-view class="registration-scroll" scroll-y show-scrollbar="false">
+        <block wx:if="{{registrationPanel === 'form'}}">
+          <picker range="{{registrationGroups}}" bindchange="changeRegistrationGroup"><view class="registration-picker">参赛组别：{{registrationForm['组别']}}　⌄</view></picker>
+          <picker wx:if="{{registrationProfiles.length}}" range="{{registrationProfileNames}}" bindchange="chooseRegistrationProfile"><view class="registration-picker">选择我已填写的车手／领航员资料　⌄</view></picker>
+          <view class="registration-tabs"><button class="{{registrationRole === 'driver' ? 'selected' : ''}}" data-role="driver" bindtap="changeRegistrationRole">车手资料</button><button class="{{registrationRole === 'navigator' ? 'selected' : ''}}" data-role="navigator" bindtap="changeRegistrationRole">领航员资料</button></view>
+          <view wx:for="{{registrationRole === 'navigator' ? navigatorFields : registrationFields}}" wx:key="*this" class="registration-field"><text>{{item}}{{item === '姓名' || item === '赛号' || item === '手机号' ? ' *' : ''}}</text><input value="{{registrationForm[item]}}" data-field="{{item}}" bindinput="changeRegistrationField" maxlength="{{item === '赛号' ? 12 : 100}}" placeholder="请输入{{item}}" /></view>
+          <view class="registration-note">车手姓名、赛号和手机号为必填；领航员按组别要求填写。身份证及手机号仅用于赛事管理，不会显示在公开报名列表。</view>
+        </block>
+        <block wx:else>
+          <view wx:if="{{registrationListLoading}}" class="registration-note">正在读取报名记录…</view>
+          <view wx:for="{{registrationRows}}" wx:key="id" class="registration-row"><view><text class="registration-number">{{item['赛号']}}</text>　{{item['姓名']}}</view><view>{{item['组别']}}　{{item['车队']}}</view></view>
+          <view wx:if="{{!registrationListLoading && !registrationRows.length && !registrationError}}" class="registration-note">暂无报名记录</view>
+        </block>
+        <view wx:if="{{registrationError}}" class="registration-error">{{registrationError}}</view>
+      </scroll-view>
+      <button wx:if="{{registrationPanel === 'form'}}" class="registration-submit" loading="{{registrationSubmitting}}" disabled="{{registrationSubmitting}}" bindtap="submitRegistration">{{registrationSubmitting ? '正在提交' : '提交报名'}}</button>
+      <button wx:else class="registration-submit" bindtap="openSignupList" disabled="{{registrationListLoading}}">刷新报名列表</button>
+    </view>
+  </view>
   <view wx:if="{{commentVisible}}" class="comment-mask" catchtap="closeComments">
     <view class="comment-panel" catchtap="stopCommentTap">
       <view class="comment-panel-title">评论 <text class="comment-close" bindtap="closeComments">×</text></view>
@@ -298,6 +386,10 @@
         <view wx:if="{{selectedScore && selectedScore.rows && selectedScore.rows.length}}" class="score-team-list">
           <view wx:for="{{selectedScore.rows}}" wx:key="id" class="score-team-card">
             <view class="score-team-head"><view><text class="score-car-label">车号：</text><text class="score-car-number">{{item.carNumber}}</text></view><view class="score-rank score-rank-{{item.rank}}"><view wx:if="{{item.rank && item.rank <= 3}}" class="score-trophy score-trophy-{{item.rank}}"><view class="score-trophy-handle score-trophy-handle-left"></view><view class="score-trophy-handle score-trophy-handle-right"></view><view class="score-trophy-bowl"></view><view class="score-trophy-stem"></view><view class="score-trophy-base"></view></view><text class="score-rank-label">排名</text><strong>{{item.rank || '—'}}</strong></view></view>
+            <view wx:if="{{item.driver || item.coDriver}}" class="score-crew-line">
+              <text wx:if="{{item.driver}}" class="score-crew-item"><text class="score-crew-role">车手：</text>{{item.driver}}</text>
+              <text wx:if="{{item.coDriver}}" class="score-crew-item"><text class="score-crew-role">领航员：</text>{{item.coDriver}}</text>
+            </view>
             <view wx:for="{{item.stageValues}}" wx:for-item="stageValue" wx:key="name" class="score-stage-record">
               <view class="score-stage-record-title">{{stageValue.name}}</view>
               <view class="score-stage-record-grid">
