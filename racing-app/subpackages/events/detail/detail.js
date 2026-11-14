@@ -953,6 +953,10 @@ Page({
   openResults() {
     wx.setNavigationBarTitle({ title: '成绩详情' })
     this.setData({ resultsSheetVisible: true, scoreViewVisible: false, selectedScore: null })
+    // 每次打开成绩详情都重新读取一次：外部网站刚发布的成绩不需要退出重进页面就能看到。
+    // 已有的分组先保留显示，读取完成后再替换，避免面板闪一下空白。
+    const eventId = this.data.id || (this.data.event && this.data.event.id)
+    if (eventId) this.loadPublishedResults(eventId)
   },
   previewDetailImage(event) {
     const current = String(event && event.currentTarget && event.currentTarget.dataset && event.currentTarget.dataset.src || '').trim()
