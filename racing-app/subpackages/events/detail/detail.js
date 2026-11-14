@@ -1011,6 +1011,7 @@ Page({
           duration: this.displayScoreValue(stage.duration)
         }
       })
+      const primaryStage = stageValues.find(item => item.name === stageName) || stageValues[0] || {}
       return {
         id: String(row.id || row.carNumber || Math.random()),
         carNumber: String(row.carNumber || ''),
@@ -1020,7 +1021,13 @@ Page({
         rank: row.rank === undefined || row.rank === null ? '' : String(row.rank),
         stageValues,
         validScore: this.displayScoreValue(row.validScore || (row.totalScore)),
-        selectedDuration: isTotal ? '' : this.displayScoreValue(row.stageTimes && row.stageTimes[stageName] && row.stageTimes[stageName].duration)
+        selectedDuration: isTotal ? '' : this.displayScoreValue(row.stageTimes && row.stageTimes[stageName] && row.stageTimes[stageName].duration),
+        // 新卡片版式：赛段用时 / 罚时 / 本赛段成绩（总成绩视图下显示总成绩）
+        cardStageTime: isTotal ? '' : (primaryStage.duration || ''),
+        cardPenalty: isTotal ? '' : (primaryStage.penalty || ''),
+        cardFinal: isTotal
+          ? this.displayScoreValue(row.validScore || (row.totalScore))
+          : (primaryStage.duration || '')
       }
     })
     wx.setNavigationBarTitle({ title: '成绩表' })

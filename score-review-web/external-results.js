@@ -100,11 +100,14 @@ function formatDurationMs(value) {
   return `${minutes}:${String(seconds).padStart(2, '0')}${millis}`
 }
 
-// 罚时按小程序习惯显示为整数秒，没有罚时留空
+// 罚时按分:秒.毫秒显示（不足一分钟时只显示秒.毫秒，例如 0:05.000），没有罚时留空
 function penaltyText(value) {
-  const ms = Number(value) || 0
+  const ms = Math.max(0, Math.round(Number(value) || 0))
   if (!ms) return ''
-  return String(Math.round(ms / 1000))
+  const millis = '.' + String(ms % 1000).padStart(3, '0')
+  const seconds = Math.floor((ms % 60000) / 1000)
+  const minutes = Math.floor(ms / 60000)
+  return `${minutes}:${String(seconds).padStart(2, '0')}${millis}`
 }
 
 function stageOrder(code) {

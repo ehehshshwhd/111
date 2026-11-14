@@ -385,21 +385,47 @@
       <scroll-view class="score-result-scroll" scroll-y="true" show-scrollbar="false">
         <view wx:if="{{selectedScore && selectedScore.rows && selectedScore.rows.length}}" class="score-team-list">
           <view wx:for="{{selectedScore.rows}}" wx:key="id" class="score-team-card">
-            <view class="score-team-head"><view><text class="score-car-label">车号：</text><text class="score-car-number">{{item.carNumber}}</text></view><view class="score-rank score-rank-{{item.rank}}"><view wx:if="{{item.rank && item.rank <= 3}}" class="score-trophy score-trophy-{{item.rank}}"><view class="score-trophy-handle score-trophy-handle-left"></view><view class="score-trophy-handle score-trophy-handle-right"></view><view class="score-trophy-bowl"></view><view class="score-trophy-stem"></view><view class="score-trophy-base"></view></view><text class="score-rank-label">排名</text><strong>{{item.rank || '—'}}</strong></view></view>
-            <view wx:if="{{item.driver || item.coDriver}}" class="score-crew-line">
-              <text wx:if="{{item.driver}}" class="score-crew-item"><text class="score-crew-role">车手：</text>{{item.driver}}</text>
-              <text wx:if="{{item.coDriver}}" class="score-crew-item"><text class="score-crew-role">领航员：</text>{{item.coDriver}}</text>
-            </view>
-            <view wx:for="{{item.stageValues}}" wx:for-item="stageValue" wx:key="name" class="score-stage-record">
-              <view class="score-stage-record-title">{{stageValue.name}}</view>
-              <view class="score-stage-record-grid">
-                <view><text>发车时间</text><strong>{{stageValue.startTime || '—'}}</strong></view>
-                <view><text>收车时间</text><strong>{{stageValue.endTime || '—'}}</strong></view>
-                <view><text>罚时</text><strong>{{stageValue.penalty || '—'}}</strong></view>
-                <view><text>赛段用时</text><strong>{{stageValue.duration || '—'}}</strong></view>
+            <!-- 上半层：车号 + 名次 + 车手/领航员 -->
+            <view class="card-upper">
+              <view class="top-row">
+                <view class="car-no-box">
+                  <text class="car-no-label">车号：</text>
+                  <text class="car-no-num">{{item.carNumber}}</text>
+                </view>
+                <view class="rank-box rank-{{item.rank}}">
+                  <text wx:if="{{item.rank == 1}}" class="trophy-icon">🥇</text>
+                  <text wx:elif="{{item.rank == 2}}" class="trophy-icon">🥈</text>
+                  <text wx:elif="{{item.rank == 3}}" class="trophy-icon">🥉</text>
+                  <text class="rank-num">{{item.rank || '—'}}</text>
+                </view>
+              </view>
+              <view class="crew-row">
+                <view class="crew-col">
+                  <text class="crew-label">车手：</text>
+                  <text class="crew-name">{{item.driver || '—'}}</text>
+                </view>
+                <view class="crew-col">
+                  <text class="crew-label">领航员：</text>
+                  <text class="crew-name">{{item.coDriver || '—'}}</text>
+                </view>
               </view>
             </view>
-            <view class="score-published-total"><text>{{selectedScore.isTotal ? (selectedScore.rankingMode === 'total' ? '总成绩' : '最佳成绩') : '本赛段成绩'}}</text><strong>{{item.validScore || item.selectedDuration || '—'}}</strong></view>
+
+            <!-- 下半层：赛段用时 | 罚时 | 本赛段成绩 -->
+            <view class="card-stats-bar">
+              <view class="stat-col">
+                <text class="stat-label">{{selectedScore.isTotal ? '所跑赛段' : '赛段用时'}}</text>
+                <text class="stat-val">{{selectedScore.isTotal ? (item.stageValues.length + ' 段') : (item.cardStageTime || '—')}}</text>
+              </view>
+              <view class="stat-col stat-col-penalty">
+                <text class="stat-label">罚时</text>
+                <text class="stat-val {{item.cardPenalty ? 'penalty-active' : 'penalty-none'}}">{{selectedScore.isTotal ? '—' : (item.cardPenalty || '—')}}</text>
+              </view>
+              <view class="stat-col stat-col-final">
+                <text class="stat-label">{{selectedScore.isTotal ? '总成绩' : '本赛段成绩'}}</text>
+                <text class="final-time">{{item.cardFinal || item.validScore || '—'}}</text>
+              </view>
+            </view>
           </view>
         </view>
         <view wx:else class="score-empty">

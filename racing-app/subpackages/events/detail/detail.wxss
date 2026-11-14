@@ -203,3 +203,36 @@ page{background:#fff;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Pi
 .registration-row view+view{color:#777;font-size:25rpx}
 .registration-number{color:#ee8700;font-weight:600}
 .align-left{text-align:left}.align-center{text-align:center}.align-right{text-align:right}.align-justify{text-align:justify}.content-bold{font-weight:700}.content-block-list-ordered{counter-reset:content-list}.content-block-list-ordered .content-block-list-item::before{counter-increment:content-list;content:counter(content-list) "、"}.content-block-list-unordered .content-block-list-item::before{content:"•  "}.content-block-list .content-block-list-item{padding-left:0}.content-block-list .content-block-list-item::before{display:inline;color:currentColor}
+
+/* ===== 成绩卡片（新版式）：上半层车号/名次/车手，下半层三列成绩栏 ===== */
+.score-team-card{position:relative;margin:0 0 20rpx;padding:0;background:#FFFFFF;border:0;border-radius:20rpx;box-shadow:0 4rpx 16rpx rgba(15,23,42,.04);overflow:hidden}
+.score-team-card + .score-team-card{margin-top:0;padding-top:0;border-top:0}
+.card-upper{padding:26rpx 30rpx 22rpx}
+.top-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18rpx}
+.car-no-box{display:flex;align-items:baseline}
+.car-no-label{font-size:28rpx;color:#111827}
+.car-no-num{font-size:40rpx;font-weight:700;line-height:1;color:#111827;font-variant-numeric:tabular-nums}
+.rank-box{display:flex;align-items:center;gap:8rpx;font-size:32rpx;font-weight:700;color:#111827;font-variant-numeric:tabular-nums}
+.rank-1,.rank-2,.rank-3{color:#111827}
+.trophy-icon{font-size:30rpx;line-height:1}
+.crew-row{display:flex;align-items:center;gap:56rpx}
+.crew-col{display:flex;flex-direction:column;min-width:0}
+.crew-label{margin-bottom:6rpx;font-size:24rpx;color:#111827}
+.crew-name{font-size:30rpx;font-weight:600;color:#1E293B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-stats-bar{display:flex;align-items:center;justify-content:space-between;padding:18rpx 30rpx;background:#F8FAFC;border-top:2rpx solid #F1F5F9}
+.stat-col{display:flex;flex-direction:column}
+.stat-col-penalty{padding-left:28rpx;border-left:2rpx solid #E2E8F0}
+.stat-col-final{align-items:flex-end}
+.stat-label{margin-bottom:6rpx;font-size:22rpx;color:#111827}
+.stat-val{font-size:26rpx;font-weight:600;color:#111827;font-variant-numeric:tabular-nums}
+.penalty-none{color:#111827}
+.penalty-active{font-weight:700;color:#E11D48}
+.final-time{font-size:36rpx;font-weight:700;line-height:1;color:#EE8600;font-variant-numeric:tabular-nums}
+/* 系统字体：思源黑体优先，缺省回退苹方/雅黑 */
+.card-upper,.card-stats-bar{font-family:"Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;font-weight:500;letter-spacing:.2rpx}
+/* 卡片之间留出可见缝隙：浅灰底色 + 卡片圆角间距；第一张卡片头顶和左右两侧都不留缝 */
+.score-result-sheet{padding-bottom:0}
+.score-result-scroll{background:#F2F4F7;height:calc(100vh - 100rpx);padding:0 0 calc(env(safe-area-inset-bottom) + 32rpx)}
+.score-team-list{padding:0}
+.score-team-card{margin:0 0 24rpx;border-radius:0}
+.score-team-card:last-child{margin-bottom:0}

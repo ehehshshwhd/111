@@ -146,7 +146,7 @@ test('snapshot keeps only published stages and splits multi-category cars per gr
   const car2Four = snapshot.rows.find(row => row.group === '四驱组' && row.carNumber === '2')
   const car2Two = snapshot.rows.find(row => row.group === '两驱组' && row.carNumber === '2')
   assert.ok(car2Four && car2Two, 'a car entered in two categories appears in both groups')
-  assert.equal(car2Four.stageTimes.SS1.penalty, '10', 'penalty is shown in whole seconds')
+  assert.equal(car2Four.stageTimes.SS1.penalty, '0:10.000', 'penalty keeps minutes:seconds.milliseconds')
   assert.equal(car2Four.stageTimes.SS1.duration, '1:45.000')
   assert.equal(car2Four.rank, 2)
   assert.equal(car2Two.rank, 1, 'rank follows the category, not the overall list')
