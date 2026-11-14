@@ -10,6 +10,7 @@ let eventsCollectionReady
 let publishedResultsCollectionReady
 let publishHistoryCollectionReady
 let permissionsCollectionsReady
+let eventDataCollectionReady
 
 const PERMISSION_STAGES = Array.from(STAGES)
 const ENTRY_PERMISSION_KEYS = ['startTime', 'endTime', 'penalty']
@@ -57,7 +58,11 @@ function cleanSignupOptions(value) {
       name: String(option.name || '').trim().slice(0, 120),
       fee: String(option.fee || '').trim().slice(0, 80),
       quota: String(option.quota || '').trim().slice(0, 80),
-      note: String(option.note || '').trim().slice(0, 500)
+      note: String(option.note || '').trim().slice(0, 500),
+      unit: String(option.unit || '').trim().slice(0, 10),
+      registeredCount: Number.isFinite(Number(option.registeredCount)) && Number(option.registeredCount) >= 0
+        ? Math.floor(Number(option.registeredCount))
+        : 0
     }
   })
 }
@@ -94,7 +99,22 @@ function cleanInfoLabels(value) {
   ]))
 }
 
-function sanitizeRichHtml(value, maxLength = 30000) {
+function visibleTextLength(value) {
+  const text = String(value || '')
+    .replace(/<br\s*\/?\s*>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#x27;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+  return Array.from(text).length
+}
+
+function sanitizeRichHtml(value, maxLength = 500000) {
   return String(value || '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<\/?(?:script|style|iframe|object|embed|form)[^>]*>/gi, '')
@@ -112,7 +132,7 @@ function cleanContentBlocks(value) {
     if (text.length > 1000) throw new Error('表格或列表单元格超过 1000 个字符')
     return text
   }
-  if (value.length > 100) throw new Error('赛事正文超过 100 项，拒绝截断读取')
+  if (value.length > 1000) throw new Error('赛事正文超过 1000 项，拒绝截断读取')
   return value.reduce((blocks, raw, index) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`赛事正文第 ${index + 1} 项格式无效`)
     const type = String(raw.type || '').trim().toLowerCase()
@@ -122,7 +142,7 @@ function cleanContentBlocks(value) {
       const text = raw.text == null ? raw.content || '' : raw.text
       if (text != null && !['string', 'number'].includes(typeof text)) throw new Error(`赛事正文第 ${index + 1} 项文字格式无效`)
       block.text = String(text)
-      if (block.text.length > 10000) throw new Error(`赛事正文第 ${index + 1} 项文字超过限制`)
+      if (block.text.length > 500000) throw new Error(`赛事正文第 ${index + 1} 项文字超过 500000 个字符`)
       if (raw.html != null && typeof raw.html !== 'string') throw new Error(`赛事正文第 ${index + 1} 项富文本格式无效`)
       if (raw.html != null) block.html = sanitizeRichHtml(raw.html)
     } else if (type === 'image') {
@@ -203,7 +223,7 @@ function cleanEvent(input, id) {
     awardsText: String(source.awardsText || '').trim().slice(0, 10000),
     // A complete, user-editable detail page. When configured, clients render
     // this document as the source of truth instead of composing legacy fields.
-    detailPageHtml: sanitizeRichHtml(source.detailPageHtml || '', 60000),
+    detailPageHtml: sanitizeRichHtml(source.detailPageHtml || '', 500000),
     detailPageConfigured: source.detailPageConfigured === true,
     contentBlocks: cleanContentBlocks(source.contentBlocks),
     // Preserve whether blocks were configured so legacy records can seed the
@@ -252,12 +272,18 @@ function validateEventInput(input) {
     ['date', 100, '顶部日期'], ['dateFull', 100, '比赛时间'], ['location', 240, '地点'],
     ['status', 30, '赛事状态'], ['notice', 240, '公告'], ['detailText', 10000, '赛事详情'],
     ['rulesText', 10000, '比赛规则'], ['awardsText', 10000, '奖项设置'],
-    ['detailPageHtml', 60000, '完整赛事详情'],
+    ['detailPageHtml', 500000, '完整赛事详情'],
     ['registrationDeadline', 30, '报名截止日期'], ['contactName', 80, '联系人'],
     ['contactPhone', 40, '联系电话'], ['contactWechat', 80, '联系微信'],
     ['registrationNote', 5000, '报名说明'], ['coverUrl', 2000, '封面地址'], ['coverFileId', 500, '封面文件 ID']
   ]
-  fieldLimits.forEach(([key, max, label]) => checkLength(source[key], max, label))
+  fieldLimits.forEach(([key, max, label]) => {
+    if (key === 'detailPageHtml') {
+      checkLength(source[key], max, label)
+      return
+    }
+    checkLength(source[key], max, label)
+  })
   for (const key of ['groups', 'visibleGroups', 'signupOptions', 'contentBlocks', 'stageNames']) {
     if (source[key] != null && !Array.isArray(source[key])) throw new Error(`${key} 格式无效，请刷新页面后重试`)
   }
@@ -291,7 +317,7 @@ function validateEventInput(input) {
       seen.add(name)
     })
   }
-  for (const [key, max] of Object.entries({ groups: 100, visibleGroups: 100, signupOptions: 100, contentBlocks: 100 })) {
+  for (const [key, max] of Object.entries({ groups: 100, visibleGroups: 100, signupOptions: 100, contentBlocks: 1000 })) {
     if (Array.isArray(source[key]) && source[key].length > max) throw new Error(`${key} 最多支持 ${max} 项，请拆分后再保存`)
   }
   for (const [key, max] of Object.entries({ sectionTitles: 80, infoLabels: 40 })) {
@@ -306,7 +332,8 @@ function validateEventInput(input) {
     if (item != null && typeof item !== 'object') checkTextType(item, `报名项 ${index + 1}`)
     if (item != null && typeof item === 'object' && Array.isArray(item)) throw new Error(`报名项 ${index + 1} 格式无效`)
     const option = item && typeof item === 'object' ? item : { name: item }
-    ;[['name', 120], ['fee', 80], ['quota', 80], ['note', 500]].forEach(([key, max]) => checkLength(option[key], max, `报名项 ${index + 1} ${key}`))
+    ;[['name', 120], ['fee', 80], ['quota', 80], ['note', 500], ['unit', 10]].forEach(([key, max]) => checkLength(option[key], max, `报名项 ${index + 1} ${key}`))
+    if (option.registeredCount != null && (!Number.isInteger(Number(option.registeredCount)) || Number(option.registeredCount) < 0)) throw new Error(`报名项 ${index + 1} 已报名人数无效`)
     if (!String(option.name || '').trim()) throw new Error(`报名项 ${index + 1} 缺少名称`)
   })
   if (Array.isArray(source.contentBlocks)) source.contentBlocks.forEach((block, index) => {
@@ -314,7 +341,10 @@ function validateEventInput(input) {
     if (!block || typeof block !== 'object' || Array.isArray(block)) throw new Error(`${label}格式无效`)
     const type = String(block.type || '').toLowerCase()
     if (!allowedBlockTypes.has(type)) throw new Error(`${label}类型“${type || '空'}”不支持，请检查后再保存`)
-    if (['heading', 'paragraph', 'text', 'note'].includes(type)) { checkLength(block.text == null ? block.content : block.text, 10000, `${label}文字`); checkLength(block.html, 30000, `${label}富文本`) }
+    if (['heading', 'paragraph', 'text', 'note'].includes(type)) {
+      checkLength(block.text == null ? block.content : block.text, 500000, `${label}文字`)
+      checkLength(block.html, 500000, `${label}富文本`)
+    }
     if (type === 'image') {
       [['url', 2000], ['miniUrl', 2000], ['fileId', 500]].forEach(([key, max]) => checkLength(block[key], max, `${label}图片${key}`))
       if (!String(block.url || '').trim() && !String(block.miniUrl || '').trim() && !String(block.fileId || '').trim()) throw new Error(`${label}图片尚未上传`)
@@ -880,6 +910,75 @@ async function ensureCollection(db) {
   return collectionReady
 }
 
+async function ensureEventDataCollection(db) {
+  if (!eventDataCollectionReady) {
+    eventDataCollectionReady = (async () => {
+      try { await db.collection('event_management_data').limit(1).get() }
+      catch (error) {
+        if (!isMissingCollectionError(error)) throw error
+        try { await db.createCollection('event_management_data') }
+        catch { await db.collection('event_management_data').limit(1).get() }
+      }
+    })().catch(error => { eventDataCollectionReady = null; throw error })
+  }
+  return eventDataCollectionReady
+}
+
+function validateEventDataKey(value) {
+  const key = String(value || '').trim()
+  if (!key || key.length > 180 || !/^[\w:.-]+$/.test(key) || ['__proto__', 'prototype', 'constructor'].includes(key)) throw new Error('赛事数据键格式无效')
+  return key
+}
+
+function eventDataDocumentId(eventId, key) {
+  return `ed_${require('node:crypto').createHash('sha256').update(`${eventId}::${key}`).digest('hex').slice(0, 40)}`
+}
+
+async function listEventData(eventId) {
+  const id = validateEventId(eventId)
+  const db = getDatabase()
+  await ensureEventDataCollection(db)
+  const items = {}
+  for (let offset = 0; ; offset += 100) {
+    const page = await db.collection('event_management_data').where({ eventId: id }).skip(offset).limit(100).get()
+    const records = Array.isArray(page.data) ? page.data : []
+    for (const record of records) {
+      const key = validateEventDataKey(record.key)
+      if (Object.prototype.hasOwnProperty.call(items, key)) throw new Error(`赛事云端数据重复：${key}；请先清理重复记录`)
+      items[key] = { value: record.value, revision: Number.isSafeInteger(Number(record.revision)) && Number(record.revision) >= 0 ? Number(record.revision) : 0, updatedAt: record.updatedAt || null }
+    }
+    if (records.length < 100) break
+  }
+  return { eventId: id, items }
+}
+
+async function putEventData(eventId, rawKey, value, expectedRevision) {
+  const id = validateEventId(eventId)
+  const key = validateEventDataKey(rawKey)
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error('赛事数据版本无效，请刷新后重试')
+  if (Buffer.byteLength(JSON.stringify(value), 'utf8') > 700 * 1024) throw new Error('单项赛事数据超过 CloudBase 安全大小，请拆分内容后重试')
+  const db = getDatabase()
+  await ensureEventDataCollection(db)
+  if (typeof db.runTransaction !== 'function') throw new Error('云数据库事务不可用，未写入赛事数据')
+  const _id = eventDataDocumentId(id, key)
+  const revision = expectedRevision + 1
+  await db.runTransaction(async transaction => {
+    const collection = transaction.collection('event_management_data')
+    let previous = null
+    try { const result = await collection.doc(_id).get(); previous = result && result.data || null }
+    catch (error) { if (!isMissingDocumentError(error)) throw error }
+    const actual = Number.isSafeInteger(Number(previous && previous.revision)) && Number(previous && previous.revision) >= 0 ? Number(previous.revision) : 0
+    if (actual !== expectedRevision) throw new Error(`赛事数据已在其他设备修改（云端版本 ${actual}，本地版本 ${expectedRevision}），本次未覆盖，请刷新后重试`)
+    const now = new Date()
+    const document = { eventId: id, key, value, revision, updatedAt: now }
+    if (previous) await collection.doc(_id).update(document)
+    else await collection.doc(_id).set({ ...document, createdAt: now })
+    const readback = await collection.doc(_id).get()
+    if (!readback || !readback.data || Number(readback.data.revision) !== revision || stableStringify(readback.data.value) !== stableStringify(value)) throw new Error('赛事数据云端回读核对失败，未确认保存成功')
+  })
+  return { eventId: id, key, revision, verified: true }
+}
+
 function validate(eventId, stage) {
   if (!STAGES.has(stage)) throw new Error('赛段无效')
   return { eventId: validateEventId(eventId), stage }
@@ -901,6 +1000,46 @@ async function get(eventId, stage) {
     revision: Number.isSafeInteger(Number(record && record.revision)) && Number(record && record.revision) >= 0 ? Number(record.revision) : 0,
     updatedAt: record && record.updatedAt || null,
     updatedByPhone: record && record.updatedByPhone || ''
+  }
+}
+
+// Read the current snapshot for every stage in one CloudBase query.  Work
+// uploads are stored as one document per event/stage, so polling this list
+// never creates history documents or grows storage.
+async function listWorkRecords(eventId) {
+  const id = validateEventId(eventId)
+  const db = getDatabase()
+  await ensureCollection(db)
+  const result = await db.collection('work_records').where({ eventId: id }).limit(STAGES.size + 1).get()
+  const records = Array.isArray(result.data) ? result.data : []
+  if (records.length > STAGES.size) throw new Error(`云端赛事 ${id} 存在重复或异常赛段记录；请先清理后重试`)
+  const byStage = new Map()
+  for (const record of records) {
+    const stage = String(record && record.stage || '').toUpperCase()
+    if (!STAGES.has(stage)) throw new Error(`云端成绩赛段无效：${stage || '空值'}`)
+    if (byStage.has(stage)) throw new Error(`云端成绩记录重复：${id}/${stage}；请先清理重复记录`)
+    const rows = cleanRows(record.rows)
+    byStage.set(stage, {
+      eventId: id,
+      stage,
+      rows,
+      count: rows.length,
+      revision: Number.isSafeInteger(Number(record.revision)) && Number(record.revision) >= 0 ? Number(record.revision) : 0,
+      updatedAt: record.updatedAt || null,
+      updatedByPhone: record.updatedByPhone || ''
+    })
+  }
+  return {
+    eventId: id,
+    stages: Array.from(STAGES).map(stage => byStage.get(stage) || {
+      eventId: id,
+      stage,
+      rows: [],
+      count: 0,
+      revision: 0,
+      updatedAt: null,
+      updatedByPhone: ''
+    })
   }
 }
 
@@ -1102,6 +1241,17 @@ function cleanPublishedResults(record, eventId = '') {
     rowCount: rows.length,
     rows
   }
+}
+
+async function getEventById(eventId) {
+  const id = validateEventId(eventId)
+  const db = getDatabase()
+  await ensureEventsCollection(db)
+  const result = await db.collection('events').where({ id }).limit(2).get()
+  if (result.data && result.data.length > 1) throw new Error(`云端赛事 ID 重复：${id}；未读取赛事`)
+  const record = result.data && result.data[0]
+  if (!record || record.deletedAt) return null
+  return cleanEvent(record, record.id || record._id)
 }
 
 async function getPublishedResults(eventId) {
@@ -1308,16 +1458,22 @@ module.exports = {
     : (process.env.TENCENTCLOUD_SECRETID && process.env.TENCENTCLOUD_SECRETKEY ? 'runtime-credentials' : 'missing'),
   check,
   validateEventId,
+  visibleTextLength,
+  validateEventInput,
   get,
+  listWorkRecords,
   listUploadBatches,
   put,
   approveAllScores,
   normalizeRows: cleanRows,
   getPublishedResults,
+  getEventById,
   listPublishHistory,
   publishResults,
   listEvents,
   saveEvent,
+  listEventData,
+  putEventData,
   uploadEventCover,
   getEventCoverTempUrl,
   uploadEventAsset,

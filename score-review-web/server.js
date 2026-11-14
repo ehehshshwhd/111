@@ -3,11 +3,18 @@ const fs = require('node:fs')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const cloudStore = require('./cloud-store')
+const externalResults = require('./external-results')
 const { isValidEventId, validateEventId } = require('./event-id')
 
 const HOST = process.env.SCORE_REVIEW_HOST || '0.0.0.0'
 const PORT = Number(process.env.SCORE_REVIEW_PORT || process.env.PORT || 4173)
 const WEB_ROOT = __dirname
+// In the container server.js is copied to /app beside full-system/. During
+// local development it is still under score-review-web/, so support both
+// layouts without changing the deployed URL structure.
+const FULL_SYSTEM_ROOT = fs.existsSync(path.resolve(WEB_ROOT, 'full-system'))
+  ? path.resolve(WEB_ROOT, 'full-system')
+  : path.resolve(WEB_ROOT, '..', 'full-system')
 const DATA_FILE = process.env.SCORE_REVIEW_DATA || path.join(WEB_ROOT, 'server-data.json')
 const WEB_PASSWORD = process.env.SCORE_REVIEW_PASSWORD
 const SESSION_SECRET = process.env.SCORE_REVIEW_SESSION_SECRET || (process.env.NODE_ENV === 'production' ? '' : crypto.randomBytes(32).toString('hex'))
@@ -41,8 +48,41 @@ function validSession(req) {
   } catch { return false }
 }
 function send(res, status, body, headers = {}) { const data = Buffer.from(JSON.stringify(body)); res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': data.length, 'Cache-Control': 'no-store', ...headers }); res.end(data) }
+function applyCors(req, res) {
+  const origin = String(req.headers.origin || '')
+  const allowed = String(process.env.SCORE_REVIEW_CORS_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean)
+  if (origin && (allowed.includes(origin) || origin === 'null')) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    res.setHeader('Vary', 'Origin')
+  }
+}
 function serve(res, urlPath) {
-  const requested = urlPath === '/' ? 'index.html' : urlPath.replace(/^\/+/, '')
+  const normalizedPath = urlPath.replace(/^\/+/, '')
+  // The migrated full system is the only web UI. The former score-review
+  // dashboard remains as API code but is deliberately not exposed as a page.
+  const requestedPath = urlPath === '/' || urlPath === '/index.html'
+    ? 'full-system/index.html'
+    : normalizedPath
+  const isFullSystem = requestedPath === 'full-system' || requestedPath.startsWith('full-system/')
+  const isFullSystemAsset = requestedPath === 'assets' || requestedPath.startsWith('assets/')
+  if (isFullSystem || isFullSystemAsset) {
+    const relative = isFullSystem
+      ? requestedPath.slice('full-system'.length).replace(/^\/+/, '') || 'index.html'
+      : requestedPath.slice('assets'.length).replace(/^\/+/, '')
+    const root = isFullSystem ? FULL_SYSTEM_ROOT : path.join(FULL_SYSTEM_ROOT, 'assets')
+    const file = path.resolve(root, relative)
+    if (!file.startsWith(root + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return send(res, 404, { ok: false, message: '页面不存在' })
+    const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }
+    let data = fs.readFileSync(file)
+    if (path.basename(file) === 'index.html' && process.env.SCORE_REVIEW_FULL_SYSTEM_API_BASE === 'same-origin') {
+      const html = data.toString('utf8')
+      data = Buffer.from(html.replace('<script type="text/babel">', '<script>window.RACE_API_SAME_ORIGIN=true;</script><script type="text/babel">'))
+    }
+    res.writeHead(200, { 'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Content-Length': data.length, 'Cache-Control': 'no-store' }); res.end(data)
+    return
+  }
+  const requested = requestedPath
   const templateCover = requested === 'event-template-cover.jpg'
     ? (fs.existsSync(path.join(WEB_ROOT, requested)) ? path.join(WEB_ROOT, requested) : path.resolve(WEB_ROOT, '..', 'racing-app', 'assets', 'events', 'event2-poster-crop.jpg'))
     : null
@@ -107,10 +147,16 @@ function cloudError(res, error) {
 }
 
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Origin': req.headers.origin || '*', 'Access-Control-Allow-Credentials': 'true', 'Access-Control-Allow-Headers': 'Content-Type' }); return res.end() }
+  applyCors(req, res)
+  if (req.method === 'OPTIONS') { const origin = String(req.headers.origin || ''); const allowed = String(process.env.SCORE_REVIEW_CORS_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean); if (origin && (allowed.includes(origin) || origin === 'null')) res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Access-Control-Allow-Credentials', 'true'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS'); res.writeHead(204); return res.end() }
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
   if (url.pathname === '/api/session' && req.method === 'POST') {
-    try { const input = await body(req); const supplied = Buffer.from(String(input.password || '')); const expected = Buffer.from(WEB_PASSWORD); if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return send(res, 401, { ok: false, message: '网页密码错误' }); const secure = process.env.NODE_ENV === 'production' ? ' Secure;' : ''; return send(res, 200, { ok: true }, { 'Set-Cookie': `score_session=${makeSession()}; HttpOnly;${secure} SameSite=Lax; Max-Age=${SESSION_COOKIE_MAX_AGE}; Path=/` }) } catch (error) { return send(res, 400, { ok: false, message: error.message }) }
+    try { const input = await body(req); const supplied = Buffer.from(String(input.password || '')); const expected = Buffer.from(WEB_PASSWORD); if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return send(res, 401, { ok: false, message: '网页密码错误' }); const secure = process.env.NODE_ENV === 'production' ? ' Secure;' : ''; const sameSite = secure ? 'None' : 'Lax'; return send(res, 200, { ok: true }, { 'Set-Cookie': `score_session=${makeSession()}; HttpOnly;${secure} SameSite=${sameSite}; Max-Age=${SESSION_COOKIE_MAX_AGE}; Path=/` }) } catch (error) { return send(res, 400, { ok: false, message: error.message }) }
+  }
+  if (url.pathname === '/api/session' && req.method === 'DELETE') {
+    const secure = process.env.NODE_ENV === 'production' ? ' Secure;' : ''
+    const sameSite = secure ? 'None' : 'Lax'
+    return send(res, 200, { ok: true }, { 'Set-Cookie': `score_session=; HttpOnly;${secure} SameSite=${sameSite}; Max-Age=0; Path=/` })
   }
   if (url.pathname === '/api/health' && req.method === 'GET') {
     let cloudDatabaseConnected = false
@@ -154,6 +200,18 @@ const server = http.createServer(async (req, res) => {
       const rawEventId = url.searchParams.get('eventId')
       if (!isValidEventId(rawEventId)) return send(res, 400, { ok: false, message: '赛事 ID 无效' })
       const eventId = validateEventId(rawEventId)
+      // 先尝试外部计时平台（按赛事名称匹配）。匹配不到或读取失败时回退到本系统发布的成绩。
+      if (cloudStore.enabled) {
+        try {
+          const event = await cloudStore.getEventById(eventId)
+          if (event && event.title) {
+            const external = await externalResults.getExternalResults(eventId, event.title)
+            if (external) return send(res, 200, external)
+          }
+        } catch (error) {
+          console.warn('外部成绩读取失败，改用本系统成绩', error && error.message || error)
+        }
+      }
       const result = cloudStore.enabled
         ? await cloudStore.getPublishedResults(eventId)
         : (readData().publishedResults || {})[eventId] || { ok: true, eventId, publishedAt: null, rankingMode: 'total', groups: [], stageNames: [], rows: [] }
@@ -195,6 +253,37 @@ const server = http.createServer(async (req, res) => {
           .sort((a, b) => new Date(b.publishedAt || b.updatedAt || b.createdAt || 0) - new Date(a.publishedAt || a.updatedAt || a.createdAt || 0))
         return send(res, 200, { ok: true, events })
       } catch (error) { return cloudError(res, error) }
+    }
+    if (url.pathname === '/api/event-data' && req.method === 'GET') {
+      const rawEventId = url.searchParams.get('eventId')
+      if (!isValidEventId(rawEventId)) return send(res, 400, { ok: false, message: '赛事 ID 无效' })
+      try {
+        const eventId = validateEventId(rawEventId)
+        if (cloudStore.enabled) return send(res, 200, { ok: true, storage: 'cloudbase', ...await cloudStore.listEventData(eventId) })
+        const all = readData().eventManagementData || {}
+        return send(res, 200, { ok: true, storage: 'server-file', eventId, items: all[eventId] || {} })
+      } catch (error) { return cloudError(res, error) }
+    }
+    if (url.pathname === '/api/event-data' && req.method === 'PUT') {
+      try {
+        const input = await body(req)
+        if (!isValidEventId(input.eventId) || typeof input.key !== 'string' || !/^[\w:.-]{1,180}$/.test(input.key) || ['__proto__', 'prototype', 'constructor'].includes(input.key) || !Object.prototype.hasOwnProperty.call(input, 'value')) return send(res, 400, { ok: false, message: '赛事 ID、数据键或数据内容无效' })
+        if (Buffer.byteLength(JSON.stringify(input.value), 'utf8') > 700 * 1024) return send(res, 400, { ok: false, message: '单项赛事数据超过安全大小，请拆分后保存' })
+        const eventId = validateEventId(input.eventId)
+        if (cloudStore.enabled) return send(res, 200, { ok: true, storage: 'cloudbase', ...await cloudStore.putEventData(eventId, input.key, input.value, input.expectedRevision) })
+        if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) return send(res, 409, { ok: false, code: 'REVISION_REQUIRED', message: '赛事数据版本缺失，请刷新后重试' })
+        const data = readData(); data.eventManagementData ||= {}
+        const event = data.eventManagementData[eventId] ||= {}
+        const previous = event[input.key]
+        const actual = Number.isSafeInteger(Number(previous && previous.revision)) && Number(previous && previous.revision) >= 0 ? Number(previous.revision) : 0
+        if (actual !== input.expectedRevision) return send(res, 409, { ok: false, code: 'REVISION_CONFLICT', message: `赛事数据已被修改（版本 ${actual}），请刷新后重试` })
+        const revision = actual + 1
+        event[input.key] = { value: input.value, revision, updatedAt: new Date().toISOString() }
+        writeData(data)
+        const verified = readData().eventManagementData?.[eventId]?.[input.key]
+        if (!verified || verified.revision !== revision || JSON.stringify(verified.value) !== JSON.stringify(input.value)) return send(res, 500, { ok: false, message: '赛事数据本地回读核对失败' })
+        return send(res, 200, { ok: true, storage: 'server-file', eventId, key: input.key, revision, verified: true })
+      } catch (error) { return send(res, 400, { ok: false, message: error.message || '赛事数据保存失败' }) }
     }
     if (url.pathname === '/api/events' && req.method === 'DELETE') {
       try {
@@ -291,6 +380,21 @@ const server = http.createServer(async (req, res) => {
       const rawEventId = url.searchParams.get('eventId'); const stage = String(url.searchParams.get('stage') || '').toUpperCase()
       if (!isValidEventId(rawEventId)) return send(res, 400, { ok: false, message: '赛事 ID 无效' })
       const eventId = validateEventId(rawEventId)
+      if (!stage || stage === 'ALL') {
+        try {
+          let result
+          if (cloudStore.enabled) result = await cloudStore.listWorkRecords(eventId)
+          else {
+            const data = readData()
+            result = { eventId, stages: Array.from({ length: 20 }, (_, index) => {
+              const name = `SS${index + 1}`
+              const record = data[key(eventId, name)] || { rows: [], revision: 0, updatedAt: null, updatedByPhone: '' }
+              return { eventId, stage: name, ...record, count: Array.isArray(record.rows) ? record.rows.length : 0 }
+            }) }
+          }
+          return send(res, 200, { ok: true, ...result })
+        } catch (error) { return cloudError(res, error) }
+      }
       if (!/^SS(?:[1-9]|1\d|20)$/.test(stage)) return send(res, 400, { ok: false, message: '赛段无效' })
       try {
         const record = cloudStore.enabled ? await cloudStore.get(eventId, stage) : (readData()[key(eventId, stage)] || { rows: [], revision: 0, updatedAt: null, updatedByPhone: '' })

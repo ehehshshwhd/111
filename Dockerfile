@@ -2,6 +2,7 @@ FROM node:20-alpine
 
 ENV NODE_ENV=production \
     PORT=8080 \
+    SCORE_REVIEW_FULL_SYSTEM_API_BASE=same-origin \
     SCORE_REVIEW_API_BASE=same-origin
 
 WORKDIR /app
@@ -9,9 +10,10 @@ WORKDIR /app
 COPY score-review-web/package.json score-review-web/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
-COPY score-review-web/server.js score-review-web/cloud-store.js score-review-web/event-id.js score-review-web/index.html score-review-web/auto-refresh.js ./
+COPY score-review-web/server.js score-review-web/cloud-store.js score-review-web/event-id.js score-review-web/prize-table-layout.js score-review-web/external-results.js ./
 COPY score-review-web/event-template-cover.jpg ./event-template-cover.jpg
 COPY score-review-web/event-assets ./event-assets
+COPY full-system ./full-system
 
 EXPOSE 8080
 CMD ["node", "server.js"]

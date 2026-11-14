@@ -7,6 +7,11 @@
 !score-review-web/cloud-store.js
 !score-review-web/event-id.js
 !score-review-web/index.html
+!score-review-web/auto-refresh.js
+!score-review-web/prize-table-layout.js
+!score-review-web/external-results.js
 !score-review-web/event-template-cover.jpg
 !score-review-web/event-assets/
 !score-review-web/event-assets/*.jpg
+!full-system/
+!full-system/**
