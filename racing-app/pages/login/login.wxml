@@ -1,0 +1,6 @@
+<view class="login-page"><view class="brand-mark">车动泰</view><view class="welcome">登录车动泰</view><view class="hint">手机号仅用于身份验证，赛事内容可直接浏览</view>
+  <view class="consent-row">
+    <view class="consent-box {{agreed ? 'checked' : ''}}" bindtap="toggleAgree"><text wx:if="{{agreed}}">✓</text></view>
+    <view class="consent-text">我已阅读并同意<text class="consent-link" data-type="user" bindtap="openAgreement">《用户服务协议》</text>和<text class="consent-link" data-type="privacy" bindtap="openAgreement">《隐私政策》</text></view>
+  </view>
+  <button class="login-btn" open-type="getPhoneNumber" bindgetphonenumber="onGetPhoneNumber" loading="{{loading}}" disabled="{{loading || !agreed}}">{{loading ? '正在登录' : (agreed ? '手机号快捷登录' : '请先勾选同意协议')}}</button><view class="login-error">{{error}}</view><button class="cancel-btn" bindtap="cancel">暂不登录</button></view>

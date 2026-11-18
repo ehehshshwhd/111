@@ -1,0 +1,21 @@
+<view class="profile-page">
+  <view wx:if="{{!loggedIn}}" class="login-empty" bindtap="onProfileTap"><view class="empty-symbol">×</view><view class="empty-text">请先登录账户</view></view>
+  <view wx:if="{{loggedIn}}">
+    <view class="profile-head" hover-class="row-pressed" hover-stay-time="80" bindtap="onProfileTap"><view class="avatar-wrap"><image wx:if="{{user.avatarUrl}}" class="avatar-image" src="{{user.avatarUrl}}" mode="aspectFill" /><view wx:else class="avatar-placeholder">👤</view></view><view class="profile-info"><view class="username">{{user.nickname}}</view><view class="role">{{user.isSuperAdmin ? '最高管理员' : (user.isAdmin ? '管理员' : (user.isStaff ? '工作人员' : '个人用户'))}}</view></view></view>
+    <view class="profile-menu-list">
+      <view wx:if="{{user.isAdmin}}" class="admin-entry" hover-class="row-pressed" bindtap="openAdmin"><text class="admin-badge">管</text><text>管理后台</text><text class="arrow">›</text></view>
+      <view class="menu-group">
+        <view class="menu-row" hover-class="row-pressed" hover-stay-time="80" data-type="privacy" bindtap="openAgreement"><text>隐私政策</text><text class="arrow">›</text></view>
+        <view class="menu-row" hover-class="row-pressed" hover-stay-time="80" data-type="user" bindtap="openAgreement"><text>用户服务协议</text><text class="arrow">›</text></view>
+      </view>
+    </view>
+    <button class="logout" bindtap="logout">退出登录</button>
+  </view>
+  <view wx:if="{{showLoginSheet}}" class="login-mask" catchtap="closeLoginSheet"><view class="login-sheet" catchtap="noop"><view class="sheet-title">手机号快捷登录</view><view class="sheet-close" bindtap="closeLoginSheet">×</view><view class="sheet-divider"></view>
+    <!-- 用户需自主阅读并勾选同意，不会默认勾选 -->
+    <view class="consent-row">
+      <view class="consent-box {{agreed ? 'checked' : ''}}" bindtap="toggleAgree"><text wx:if="{{agreed}}">✓</text></view>
+      <view class="consent-text">我已阅读并同意<text class="consent-link" data-type="user" catchtap="openAgreement">《用户服务协议》</text>和<text class="consent-link" data-type="privacy" catchtap="openAgreement">《隐私政策》</text></view>
+    </view>
+    <button class="phone-login" open-type="getPhoneNumber" bindgetphonenumber="getPhoneNumber" loading="{{loading}}" disabled="{{loading || !agreed}}">{{loading ? '正在授权' : (agreed ? '手机号快捷登录' : '请先勾选同意协议')}}</button><view class="sheet-error">{{error}}</view></view></view>
+</view>
