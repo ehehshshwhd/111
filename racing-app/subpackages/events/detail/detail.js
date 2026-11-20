@@ -999,22 +999,44 @@ Page({
     const snapshot = this._publishedResults
     const isTotal = stageName === '总成绩'
     const stageNames = isTotal ? group.stages.filter(name => name !== '总成绩') : [stageName]
-    const rankOfRow = row => {
-      if (isTotal) return row.rank
-      // 赛段视图用该赛段的组别名次；老数据没有 stageRanks 时退回总名次
-      if (row.stageRanks && typeof row.stageRanks === 'object') return row.stageRanks[stageName]
-      return row.rank
+    // 名次只跟同组别比：按本组用时从快到慢排，时间相同名次相同；
+    // 没有用时的条目（退赛等）排最后，沿用后端给的名次或留空。
+    const parseMs = value => {
+      if (value === undefined || value === null || value === '') return null
+      const parts = String(value).trim().split(':')
+      if (parts.length === 2) return Number(parts[0]) * 60000 + Math.round(Number(parts[1]) * 1000)
+      if (parts.length === 3) return Number(parts[0]) * 3600000 + Number(parts[1]) * 60000 + Math.round(Number(parts[2]) * 1000)
+      return null
+    }
+    const serverRankOf = row => {
+      const value = isTotal
+        ? row.rank
+        : (row.stageRanks && typeof row.stageRanks === 'object' ? row.stageRanks[stageName] : undefined)
+      const number = Number(value)
+      return Number.isFinite(number) && number > 0 ? number : null
     }
     const groupRows = snapshot ? snapshot.rows.filter(row => String(row && row.group || '') === group.name) : []
-    // 分组内按名次从 1 往下排，没有名次的排最后
-    const rows = isTotal ? groupRows : groupRows.slice().sort((left, right) => {
-      const a = Number(rankOfRow(left))
-      const b = Number(rankOfRow(right))
-      const av = Number.isFinite(a) && a > 0 ? a : Infinity
-      const bv = Number.isFinite(b) && b > 0 ? b : Infinity
-      return av - bv
+    const entries = groupRows.map(row => ({
+      row,
+      ms: parseMs(isTotal
+        ? (row.validScore || row.totalScore)
+        : (row.stageTimes && row.stageTimes[stageName] && row.stageTimes[stageName].duration)),
+      rank: null
+    }))
+    entries.sort((left, right) => (left.ms == null ? Infinity : left.ms) - (right.ms == null ? Infinity : right.ms))
+    let previousMs = null
+    let previousRank = 0
+    entries.forEach((entry, index) => {
+      if (entry.ms == null) {
+        entry.rank = serverRankOf(entry.row)
+        return
+      }
+      if (entry.ms !== previousMs) previousRank = index + 1
+      previousMs = entry.ms
+      entry.rank = previousRank
     })
-    const scoreRows = rows.map(row => {
+    const scoreRows = entries.map(entry => {
+      const row = entry.row
       const stageValues = stageNames.map(name => {
         const stage = row.stageTimes && row.stageTimes[name] || {}
         return {
@@ -1026,7 +1048,7 @@ Page({
         }
       })
       const primaryStage = stageValues.find(item => item.name === stageName) || stageValues[0] || {}
-      const rankValue = rankOfRow(row)
+      const rankValue = entry.rank
       return {
         id: String(row.id || row.carNumber || Math.random()),
         carNumber: String(row.carNumber || ''),
