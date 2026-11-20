@@ -230,9 +230,9 @@ page{background:#fff;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Pi
 .final-time{font-size:36rpx;font-weight:700;line-height:1;color:#EE8600;font-variant-numeric:tabular-nums}
 /* 系统字体：思源黑体优先，缺省回退苹方/雅黑 */
 .card-upper,.card-stats-bar{font-family:"Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Microsoft YaHei",sans-serif;font-weight:500;letter-spacing:.2rpx}
-/* 卡片列表：弹层用 flex 撑满可视区，列表自动占满剩余高度，底部只剩安全区内边距 */
-.score-result-sheet{height:100%;padding:0;display:flex;flex-direction:column;background:#fff}
-.score-result-scroll{flex:1;height:0;min-height:0;box-sizing:border-box;background:#F2F4F7;padding:0 0 calc(env(safe-area-inset-bottom) + 32rpx)}
+/* 卡片列表：弹层固定铺满整个可视区，列表自动占满剩余高度；弹层底色与列表一致，底部不再出现异色条带 */
+.score-result-sheet{position:fixed;top:0;right:0;bottom:0;left:0;height:auto;padding:0;display:flex;flex-direction:column;background:#F2F4F7}
+.score-result-scroll{flex:1;height:0;min-height:0;box-sizing:border-box;background:#F2F4F7;padding:0 0 calc(env(safe-area-inset-bottom) + 16rpx)}
 .score-team-list{padding:0}
 .score-team-card{margin:0 0 24rpx;border-radius:0}
 .score-team-card:last-child{margin-bottom:0}
