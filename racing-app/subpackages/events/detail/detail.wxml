@@ -8,7 +8,14 @@
     <button wx:if="{{canAccessWork}}" class="outline-btn work-btn" bindtap="openWorkBackend">进入工作后台</button>
   </block>
 </template>
-<view class="detail-page-root">
+<view class="detail-page-root" style="padding-top:{{navTotalHeight}}px">
+  <!-- 自定义导航栏：返回键先退出成绩表 / 成绩详情，再离开页面 -->
+  <view class="custom-nav" style="padding-top:{{statusBarHeight}}px">
+    <view class="custom-nav-inner">
+      <view class="custom-nav-back" bindtap="handleNavBack">‹</view>
+      <view class="custom-nav-title">{{navTitle}}</view>
+    </view>
+  </view>
   <scroll-view class="detail-scroll" scroll-y show-scrollbar="false">
     <view wx:if="{{eventConfigError}}" class="event-load-error">
       <text>{{eventConfigError}}</text>
@@ -381,7 +388,7 @@
       </scroll-view>
     </view>
 
-    <view wx:if="{{scoreViewVisible && selectedScore}}" class="score-result-sheet" catchtap="stopSheetTap">
+    <view wx:if="{{scoreViewVisible && selectedScore}}" class="score-result-sheet" style="top:{{navTotalHeight}}px" catchtap="stopSheetTap">
       <scroll-view class="score-result-scroll" scroll-y="true" show-scrollbar="false">
         <view wx:if="{{selectedScore && selectedScore.rows && selectedScore.rows.length}}" class="score-team-list">
           <view wx:for="{{selectedScore.rows}}" wx:key="id" class="score-team-card">

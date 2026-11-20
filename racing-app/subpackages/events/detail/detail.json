@@ -1,0 +1,10 @@
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "赛事详情",
+  "navigationBarBackgroundColor": "#fb9700",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#ffffff",
+  "backgroundTextStyle": "light",
+  "disableScroll": true,
+  "usingComponents": {}
+}

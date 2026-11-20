@@ -236,3 +236,10 @@ page{background:#fff;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Pi
 .score-team-list{padding:0}
 .score-team-card{margin:0 0 24rpx;border-radius:0}
 .score-team-card:last-child{margin-bottom:0}
+
+/* ===== 自定义导航栏（关闭系统导航后自绘，返回键由页面控制） ===== */
+.custom-nav{position:fixed;top:0;left:0;right:0;z-index:300;background:#fb9700;color:#fff}
+.custom-nav-inner{position:relative;display:flex;align-items:center;justify-content:center;height:44px}
+.custom-nav-back{position:absolute;left:0;top:0;bottom:0;width:56px;display:flex;align-items:center;justify-content:center;font-size:46rpx;line-height:1;color:#fff}
+.custom-nav-title{max-width:56%;font-size:34rpx;line-height:1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-page-root{box-sizing:border-box}

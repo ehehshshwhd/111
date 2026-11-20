@@ -553,6 +553,9 @@ function normalizeSignupOptions(value, registrationEnabled = false) {
 
 Page({
   data: {
+    navTitle: '赛事详情',
+    statusBarHeight: 20,
+    navTotalHeight: 64,
     id: 'suiping',
     // Keep the first render fully defined. WeChat's view layer can fail its
     // initial patch when a large WXML tree reads properties from null.
@@ -572,6 +575,12 @@ Page({
   },
   onLoad(query) {
     query = query || {}
+    let statusBarHeight = 20
+    try {
+      const windowInfo = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()
+      statusBarHeight = Number(windowInfo && windowInfo.statusBarHeight) || 20
+    } catch (e) { statusBarHeight = 20 }
+    this.setData({ statusBarHeight, navTotalHeight: statusBarHeight + 44 })
     const requestedId = query.id || 'suiping'
     const id = normalizeEventId(requestedId)
     const event = this.makeEvent(id)
@@ -951,7 +960,7 @@ Page({
     wx.showModal({ title: '赛事公告', content: notice, showCancel: false })
   },
   openResults() {
-    wx.setNavigationBarTitle({ title: '成绩详情' })
+    this.setData({ navTitle: '成绩详情' })
     this.setData({ resultsSheetVisible: true, scoreViewVisible: false, selectedScore: null })
     // 每次打开成绩详情都重新读取一次：外部网站刚发布的成绩不需要退出重进页面就能看到。
     // 已有的分组先保留显示，读取完成后再替换，避免面板闪一下空白。
@@ -974,12 +983,24 @@ Page({
     if (current) wx.previewImage({ current, urls: [current] })
   },
   closeResults() {
-    wx.setNavigationBarTitle({ title: '赛事详情' })
+    this.setData({ navTitle: '赛事详情' })
     this.setData({ resultsSheetVisible: false, scoreViewVisible: false, selectedScore: null })
   },
   backToScoreGroups() {
-    wx.setNavigationBarTitle({ title: '成绩详情' })
+    this.setData({ navTitle: '成绩详情' })
     this.setData({ scoreViewVisible: false, selectedScore: null })
+  },
+  // 自定义导航栏的返回：先退出成绩表回到成绩详情，再退出成绩详情回到赛事，最后才是离开页面
+  handleNavBack() {
+    if (this.data.scoreViewVisible) {
+      this.backToScoreGroups()
+      return
+    }
+    if (this.data.resultsSheetVisible) {
+      this.closeResults()
+      return
+    }
+    wx.navigateBack({ delta: 1, fail: () => wx.switchTab({ url: '/pages/events/events' }) })
   },
   stopSheetTap() {},
   toggleScoreGroup(event) {
@@ -1067,7 +1088,7 @@ Page({
           : (primaryStage.duration || '')
       }
     })
-    wx.setNavigationBarTitle({ title: '成绩表' })
+    this.setData({ navTitle: '成绩表' })
     this.setData({
       scoreViewVisible: true,
       selectedScore: {
