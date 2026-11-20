@@ -153,6 +153,41 @@ test('snapshot keeps only published stages and splits multi-category cars per gr
   assert.deepEqual(snapshot.groupStageNames['四驱组'].sort(), ['SS1', 'SS10'].sort())
 })
 
+test('overall rows without category ranks are ranked inside each group', async () => {
+  // 真实接口的总成绩行只有全场 rank，没有 category_ranks；组别名次必须按组内用时重新排
+  const fetchImpl = fakeFetch({
+    '/events/evt1': detail,
+    '/events/evt1/stages/s1': {
+      published: true,
+      rows: [
+        { bib: '1', categories: ['catA'], time_ms: 90000, penalty_ms: 0, total_ms: 90000, rank: 2, category_ranks: { catA: 1 } },
+        { bib: '2', categories: ['catA'], time_ms: 95000, penalty_ms: 0, total_ms: 95000, rank: 3, category_ranks: { catA: 2 } },
+        { bib: '3', categories: ['catB'], time_ms: 88000, penalty_ms: 0, total_ms: 88000, rank: 1, category_ranks: { catB: 1 } },
+        { bib: '4', categories: ['catB'], time_ms: 99000, penalty_ms: 0, total_ms: 99000, rank: 4, category_ranks: { catB: 2 } }
+      ]
+    },
+    '/events/evt1/stages/s3': { published: true, rows: [] },
+    '/events/evt1/overall': {
+      published: true,
+      rows: [
+        { bib: '1', categories: ['catA'], total_ms: 90000, rank: 2 },
+        { bib: '2', categories: ['catA'], total_ms: 95000, rank: 3 },
+        { bib: '3', categories: ['catB'], total_ms: 88000, rank: 1 },
+        { bib: '4', categories: ['catB'], total_ms: 99000, rank: 4 }
+      ]
+    }
+  })
+  const snapshot = await external.buildSnapshot('event-x', 'evt1', fetchImpl)
+  const find = (group, carNumber) => snapshot.rows.find(row => row.group === group && row.carNumber === carNumber)
+
+  assert.equal(find('四驱组', '1').rank, 1, 'the first car of the group is rank 1, not its overall rank')
+  assert.equal(find('四驱组', '2').rank, 2)
+  assert.equal(find('两驱组', '3').rank, 1)
+  assert.equal(find('两驱组', '4').rank, 2)
+  assert.equal(find('四驱组', '1').stageRanks.SS1, 1, 'stage ranks are kept per group')
+  assert.equal(find('两驱组', '3').stageRanks.SS1, 1)
+})
+
 test('without an overall snapshot ranks come from the stage rows', async () => {
   const fetchImpl = fakeFetch({
     '/events/evt1': detail,

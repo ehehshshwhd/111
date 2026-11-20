@@ -997,9 +997,23 @@ Page({
     if (!group || !group.stages[stageIndex]) return
     const stageName = group.stages[stageIndex]
     const snapshot = this._publishedResults
-    const rows = snapshot ? snapshot.rows.filter(row => String(row && row.group || '') === group.name) : []
     const isTotal = stageName === '总成绩'
     const stageNames = isTotal ? group.stages.filter(name => name !== '总成绩') : [stageName]
+    const rankOfRow = row => {
+      if (isTotal) return row.rank
+      // 赛段视图用该赛段的组别名次；老数据没有 stageRanks 时退回总名次
+      if (row.stageRanks && typeof row.stageRanks === 'object') return row.stageRanks[stageName]
+      return row.rank
+    }
+    const groupRows = snapshot ? snapshot.rows.filter(row => String(row && row.group || '') === group.name) : []
+    // 分组内按名次从 1 往下排，没有名次的排最后
+    const rows = isTotal ? groupRows : groupRows.slice().sort((left, right) => {
+      const a = Number(rankOfRow(left))
+      const b = Number(rankOfRow(right))
+      const av = Number.isFinite(a) && a > 0 ? a : Infinity
+      const bv = Number.isFinite(b) && b > 0 ? b : Infinity
+      return av - bv
+    })
     const scoreRows = rows.map(row => {
       const stageValues = stageNames.map(name => {
         const stage = row.stageTimes && row.stageTimes[name] || {}
@@ -1012,13 +1026,14 @@ Page({
         }
       })
       const primaryStage = stageValues.find(item => item.name === stageName) || stageValues[0] || {}
+      const rankValue = rankOfRow(row)
       return {
         id: String(row.id || row.carNumber || Math.random()),
         carNumber: String(row.carNumber || ''),
         group: String(row.group || ''),
         driver: String(row.driver || row.driverName || row.name || ''),
         coDriver: String(row.coDriver || row.navigator || row.coDriverName || ''),
-        rank: row.rank === undefined || row.rank === null ? '' : String(row.rank),
+        rank: rankValue === undefined || rankValue === null || rankValue === '' ? '' : String(rankValue),
         stageValues,
         validScore: this.displayScoreValue(row.validScore || (row.totalScore)),
         selectedDuration: isTotal ? '' : this.displayScoreValue(row.stageTimes && row.stageTimes[stageName] && row.stageTimes[stageName].duration),

@@ -139,10 +139,12 @@ async function findExternalEvent(eventName, fetchImpl = fetch) {
   return scored[0].item
 }
 
-function rankOf(row, categoryId) {
+// 组别名次只认网站给出的 category_ranks；网站的总成绩行只带全场排名，
+// 那不是组别名次，必须留空交给按组别计算，否则会出现 23、24 这样的写法。
+function categoryRankOf(row, categoryId) {
   const ranks = row && row.category_ranks
   if (ranks && categoryId != null && ranks[categoryId] != null) return Number(ranks[categoryId])
-  return row && row.rank != null ? Number(row.rank) : null
+  return null
 }
 
 // 把外部赛事的已发布成绩转换成小程序成绩表使用的快照结构
@@ -178,7 +180,7 @@ async function buildSnapshot(eventId, externalEventId, fetchImpl = fetch) {
   const competitors = new Map() // group \u0000 carNumber -> 条目
   const ensure = (group, carNumber) => {
     const key = `${group}\u0000${carNumber}`
-    if (!competitors.has(key)) competitors.set(key, { group, carNumber, driver: '', coDriver: '', stageTimes: {}, totalMs: 0, rank: null, fromOverall: false })
+    if (!competitors.has(key)) competitors.set(key, { group, carNumber, driver: '', coDriver: '', stageTimes: {}, stageMs: {}, stageRanks: {}, totalMs: 0, rank: null, fromOverall: false })
     return competitors.get(key)
   }
 
@@ -189,7 +191,8 @@ async function buildSnapshot(eventId, externalEventId, fetchImpl = fetch) {
       if (!carNumber) continue
       const categoryIds = Array.isArray(row.categories) && row.categories.length ? row.categories.map(String) : ['']
       const penalty = penaltyText(row.penalty_ms)
-      const duration = formatDurationMs(row.total_ms != null ? row.total_ms : Number(row.time_ms || 0) + Number(row.penalty_ms || 0))
+      const ms = Number(row.total_ms != null ? row.total_ms : Number(row.time_ms || 0) + Number(row.penalty_ms || 0))
+      const duration = formatDurationMs(ms)
       for (const categoryId of categoryIds) {
         const group = categoryId ? (categoryName[categoryId] || categoryId) : '未分组'
         const item = ensure(group, carNumber)
@@ -197,7 +200,33 @@ async function buildSnapshot(eventId, externalEventId, fetchImpl = fetch) {
         if (row.name) item.driver = String(row.name).trim()
         if (row.co_driver) item.coDriver = String(row.co_driver).trim()
         item.stageTimes[code] = { startTime: '', endTime: '', penalty, duration }
+        item.stageMs[code] = ms
+        const siteRank = categoryRankOf(row, categoryId)
+        if (siteRank != null) item.stageRanks[code] = siteRank
       }
+    }
+  }
+
+  // 网站没给某个赛段的组别名次时，按同组别该赛段用时排序补上，保证名次连续
+  for (const { code } of stagePayloads) {
+    if (!code) continue
+    const byGroup = new Map()
+    for (const item of competitors.values()) {
+      if (item.stageMs[code] == null) continue
+      if (!byGroup.has(item.group)) byGroup.set(item.group, [])
+      byGroup.get(item.group).push(item)
+    }
+    for (const list of byGroup.values()) {
+      list.sort((a, b) => a.stageMs[code] - b.stageMs[code]
+        || a.carNumber.localeCompare(b.carNumber, undefined, { numeric: true }))
+      let previousMs = null
+      let previousRank = 0
+      list.forEach((item, index) => {
+        if (item.stageRanks[code] != null) return
+        if (item.stageMs[code] !== previousMs) previousRank = index + 1
+        previousMs = item.stageMs[code]
+        item.stageRanks[code] = previousRank
+      })
     }
   }
 
@@ -211,7 +240,8 @@ async function buildSnapshot(eventId, externalEventId, fetchImpl = fetch) {
       if (row.name) item.driver = String(row.name).trim()
       if (row.co_driver) item.coDriver = String(row.co_driver).trim()
       item.totalMs = Number(row.total_ms || 0)
-      item.rank = rankOf(row, categoryId)
+      // 总成绩行只带全场排名，没有组别名次；留空由下面按组别用时补算
+      item.rank = categoryRankOf(row, categoryId)
       item.fromOverall = true
     }
   }
@@ -233,18 +263,15 @@ async function buildSnapshot(eventId, externalEventId, fetchImpl = fetch) {
   for (const group of groups) {
     const list = [...competitors.values()]
       .filter(item => item.group === group)
-      .sort((a, b) => (a.rank == null ? 1e9 : a.rank) - (b.rank == null ? 1e9 : b.rank)
-        || a.totalMs - b.totalMs
+      .sort((a, b) => a.totalMs - b.totalMs
         || a.carNumber.localeCompare(b.carNumber, undefined, { numeric: true }))
     let previousMs = null
     let previousRank = 0
     list.forEach((item, index) => {
       const total = formatDurationMs(item.totalMs)
-      // 网站给了名次就用它的；没给就按总用时排（并列名次相同）
-      if (item.rank == null) {
-        if (item.totalMs !== previousMs) previousRank = index + 1
-        previousMs = item.totalMs
-      }
+      // 名次只跟同组别比：网站给了组别名次就用它的，没给就按组内总用时排（并列名次相同）
+      if (item.totalMs !== previousMs) previousRank = index + 1
+      previousMs = item.totalMs
       rows.push({
         id: `${eventId}-${group}-${item.carNumber}`,
         carNumber: item.carNumber,
@@ -252,6 +279,7 @@ async function buildSnapshot(eventId, externalEventId, fetchImpl = fetch) {
         driver: item.driver,
         coDriver: item.coDriver,
         stageTimes: item.stageTimes,
+        stageRanks: item.stageRanks,
         bestScore: total,
         totalScore: total,
         validScore: total,
